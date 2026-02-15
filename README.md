@@ -15,7 +15,14 @@ Minimal Next.js example app that demonstrates a small UI + a server API route. D
   - `anon` (public) key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - `service_role` (server) key → `SUPABASE_SERVICE_ROLE_KEY`
 
-- Create a simple `messages` table (SQL Editor):
+- Run the SQL migration in `supabase/migrations/001_init.sql` (SQL editor) to create the onboarding schema and demo user.
+
+- Example tables created by the migration:
+  - `users`, `profiles`, `business_models`, `niche_positioning`, `user_platforms`, `content_preferences`, `posting_plan`, `content_ideas`
+
+- Set env vars in deployment dashboards (see below).
+
+- To create the `messages` table used in the demo (optional):
 
   CREATE TABLE public.messages (
     id BIGSERIAL PRIMARY KEY,
@@ -23,7 +30,7 @@ Minimal Next.js example app that demonstrates a small UI + a server API route. D
     created_at TIMESTAMPTZ DEFAULT now()
   );
 
-- Set env vars in deployment dashboards (see below).
+- After running migrations, open the app and complete onboarding — the Dashboard uses the stored data and can generate AI strategy (server-side).
 
 ## Deploy: Vercel
 1. Import this repository into Vercel.
