@@ -1,7 +1,6 @@
 // POST /api/tts  { text: string }
 // Returns audio as mp3 using OpenAI TTS API
-// Voice: "nova" — young, warm, natural, calm (like a yoga instructor)
-// Speed: 0.8 — gentle, unhurried meditation pace
+// Voice: "alloy" at 0.75 speed via tts-1-hd — calm, natural, gender-neutral
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -9,21 +8,21 @@ export default async function handler(req, res) {
   if (!text?.trim()) return res.status(400).json({ error: 'text required' })
   if (!process.env.OPENAI_API_KEY) return res.status(404).json({ error: 'no tts available' })
 
-  // Add breathing pauses to make speech feel more natural/meditative
+  // Add natural pauses for meditative pacing
   const processed = text
-    .replace(/\. /g, '... ')       // longer pauses at sentences
-    .replace(/— /g, '... ')        // pause at em dashes
-    .replace(/\? /g, '?... ')      // pause after questions
+    .replace(/\. /g, '. ... ')
+    .replace(/— /g, '... ')
+    .replace(/\? /g, '? ... ')
 
   try {
     const r = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: 'tts-1-hd',       // HD model — smoother, more natural
-        voice: 'nova',            // young, warm, calm — yoga instructor feel
+        model: 'tts-1-hd',
+        voice: 'alloy',
         input: processed,
-        speed: 0.8                // gentle meditation pace
+        speed: 0.75
       })
     })
     if (!r.ok) return res.status(500).json({ error: 'tts failed' })

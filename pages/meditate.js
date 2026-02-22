@@ -106,8 +106,6 @@ function SessionPlayer({ session, onReset }) {
   const [playing, setPlaying] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const timerRef = useRef(null)
-  const audioCtxRef = useRef(null)
-  const audioOscRef = useRef(null)
   const ttsAudioRef = useRef(null)
   const ripple = useRipple()
 
@@ -177,50 +175,32 @@ function SessionPlayer({ session, onReset }) {
     }
   }, [playing, stepIdx])
 
-  // Raga audio engine (unchanged logic, extracted for clarity)
-  const RAGAS = {
-    darbari:      { notes: [130.81, 155.56, 174.61, 196.00, 233.08], character: 'heavy' },
-    shivaranjani: { notes: [196.00, 220.00, 233.08, 293.66, 329.63], character: 'poignant' },
-    punnagavarali:{ notes: [174.61, 185.00, 220.00, 261.63, 277.18], character: 'serpentine' },
-    ahirbhairav:  { notes: [146.83, 155.56, 185.00, 196.00, 220.00], character: 'devotional' },
-    hamsadhwani:  { notes: [261.63, 293.66, 329.63, 392.00, 493.88], character: 'bright' },
-    yaman:        { notes: [261.63, 293.66, 329.63, 370.00, 392.00], character: 'serene' },
-    bhimpalasi:   { notes: [196.00, 220.00, 233.08, 261.63, 293.66], character: 'soulful' },
+  // Mood-specific ambient music tracks (royalty-free from Pixabay)
+  const AMBIENT_TRACKS = {
+    darbari:       'https://cdn.pixabay.com/audio/2024/11/01/audio_febc508c19.mp3',  // deep meditation flute
+    shivaranjani:  'https://cdn.pixabay.com/audio/2022/02/17/audio_16a2278ad5.mp3',  // emotional ambient
+    punnagavarali: 'https://cdn.pixabay.com/audio/2024/09/11/audio_f2dba6faed.mp3',  // calming sitar
+    ahirbhairav:   'https://cdn.pixabay.com/audio/2023/10/30/audio_e4b498a6c8.mp3',  // devotional morning
+    hamsadhwani:   'https://cdn.pixabay.com/audio/2024/02/14/audio_8ceb40e1e0.mp3',  // uplifting meditation
+    yaman:         'https://cdn.pixabay.com/audio/2022/03/10/audio_d65d387cce.mp3',  // serene evening
+    bhimpalasi:    'https://cdn.pixabay.com/audio/2023/07/19/audio_e552e8e71e.mp3',  // soulful ambient
   }
 
+  const bgMusicRef = useRef(null)
+
   function startAudio() {
-    const ac = new (window.AudioContext || window.webkitAudioContext)()
-    ac.resume()
     const ragaKey = session.soundProfile?.raga || 'darbari'
-    const raga = RAGAS[ragaKey] || RAGAS.darbari
-    const master = ac.createGain()
-    master.gain.value = raga.character === 'heavy' || raga.character === 'serpentine' ? 0.08 : 0.1
-    master.connect(ac.destination)
-    const nodes = []
-
-    const drone = ac.createOscillator(); drone.type = 'sine'; drone.frequency.value = raga.notes[0]
-    const dg = ac.createGain(); dg.gain.value = 0.5; drone.connect(dg).connect(master); drone.start(); nodes.push(drone)
-
-    const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.08
-    const lg = ac.createGain(); lg.gain.value = 0.15; lfo.connect(lg).connect(dg.gain); lfo.start(); nodes.push(lfo)
-
-    const fifth = ac.createOscillator(); fifth.type = 'sine'; fifth.frequency.value = raga.notes[3] || raga.notes[0] * 1.5
-    const fg = ac.createGain(); fg.gain.value = 0.2; fifth.connect(fg).connect(master); fifth.start(); nodes.push(fifth)
-
-    const melody = ac.createOscillator(); melody.type = 'triangle'; melody.frequency.value = raga.notes[1]
-    const mg = ac.createGain(); mg.gain.value = 0.12; melody.connect(mg).connect(master); melody.start(); nodes.push(melody)
-
-    let ni = 1
-    const mi = setInterval(() => { ni = (ni + 1) % raga.notes.length; melody.frequency.setTargetAtTime(raga.notes[ni], ac.currentTime, 2) }, 8000)
-
-    audioCtxRef.current = ac; audioOscRef.current = { nodes, melodyInterval: mi }
+    const trackUrl = AMBIENT_TRACKS[ragaKey] || AMBIENT_TRACKS.darbari
+    const audio = new Audio(trackUrl)
+    audio.loop = true
+    audio.volume = 0.25  // soft background — voice is primary
+    audio.play().catch(() => {})
+    bgMusicRef.current = audio
   }
 
   function stopAudio() {
     clearTimeout(timerRef.current)
-    if (audioOscRef.current) { clearInterval(audioOscRef.current.melodyInterval); audioOscRef.current.nodes?.forEach(n => { try { n.stop() } catch {} }) }
-    try { audioCtxRef.current?.close() } catch {}
-    audioOscRef.current = null; audioCtxRef.current = null
+    if (bgMusicRef.current) { bgMusicRef.current.pause(); bgMusicRef.current = null }
     if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
     window.speechSynthesis?.cancel()
   }
