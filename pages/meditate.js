@@ -9,14 +9,24 @@ function useBinauralBeat() {
   const ctxRef = useRef(null)
   const nodesRef = useRef(null)
 
-  const start = useCallback((freq) => {
-    stop()
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    const gain = ctx.createGain()
-    gain.gain.value = 0.3
-    gain.connect(ctx.destination)
+  function cleanup() {
+    try {
+      nodesRef.current?.oscL?.stop()
+      nodesRef.current?.oscR?.stop()
+    } catch {}
+    nodesRef.current = null
+    try { ctxRef.current?.close() } catch {}
+    ctxRef.current = null
+  }
 
-    const baseFreq = 200
+  const start = useCallback((freq) => {
+    cleanup()
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    // Resume context — required by Chrome/Safari autoplay policy
+    if (ctx.state === 'suspended') ctx.resume()
+
+    // Main binaural oscillators
+    const baseFreq = 150
     const oscL = ctx.createOscillator()
     const oscR = ctx.createOscillator()
     oscL.type = 'sine'
@@ -24,11 +34,15 @@ function useBinauralBeat() {
     oscL.frequency.value = baseFreq
     oscR.frequency.value = baseFreq + freq
 
-    // stereo panning for binaural effect
     const panL = ctx.createStereoPanner()
     const panR = ctx.createStereoPanner()
     panL.pan.value = -1
     panR.pan.value = 1
+
+    // Master gain — audible level
+    const gain = ctx.createGain()
+    gain.gain.value = 0.6
+    gain.connect(ctx.destination)
 
     oscL.connect(panL).connect(gain)
     oscR.connect(panR).connect(gain)
@@ -39,19 +53,9 @@ function useBinauralBeat() {
     nodesRef.current = { oscL, oscR }
   }, [])
 
-  const stop = useCallback(() => {
-    if (nodesRef.current) {
-      nodesRef.current.oscL.stop()
-      nodesRef.current.oscR.stop()
-      nodesRef.current = null
-    }
-    if (ctxRef.current) {
-      ctxRef.current.close()
-      ctxRef.current = null
-    }
-  }, [])
+  const stop = useCallback(() => cleanup(), [])
 
-  useEffect(() => () => stop(), [stop])
+  useEffect(() => () => cleanup(), [])
   return { start, stop }
 }
 
@@ -144,21 +148,21 @@ function SessionPlayer({ session, onReset }) {
   }, [playing, stepIdx, totalDuration, steps.length])
 
   // Start/stop binaural audio with play state
-  useEffect(() => {
-    if (playing && !audioOn) {
-      binaural.start(session.soundProfile.frequency)
-      setAudioOn(true)
-    } else if (!playing && audioOn) {
-      binaural.stop()
-      setAudioOn(false)
-    }
-  }, [playing, audioOn, binaural, session.soundProfile.frequency])
+  const toggle = () => {
+    setPlaying(p => {
+      if (!p) {
+        binaural.start(session.soundProfile.frequency)
+        setAudioOn(true)
+      } else {
+        binaural.stop()
+        setAudioOn(false)
+      }
+      return !p
+    })
+  }
 
-  // Cleanup on unmount
-  useEffect(() => () => binaural.stop(), [binaural])
-
+  useEffect(() => () => { binaural.stop() }, [binaural])
   const goStep = useCallback((i) => { setStepIdx(i); setElapsed(0) }, [])
-  const toggle = () => setPlaying(p => !p)
   const pct = totalDuration > 0 ? (elapsed / totalDuration) * 100 : 0
 
   const { atmosphere, soundProfile, culturalElement } = session
