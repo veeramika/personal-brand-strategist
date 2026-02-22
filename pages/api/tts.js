@@ -4,6 +4,7 @@
 async function elevenLabs(text) {
   const key = process.env.ELEVENLABS_API_KEY
   if (!key) { console.log('TTS: No ELEVENLABS_API_KEY'); return null }
+  // Free-tier voices: Rachel=21m00Tcm4TlvDq8ikWAM, Domi=AZnzlk1XvdvUeBnXmlld, Bella=EXAVITQu4vr4xnSDxMaL
   const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
   console.log('TTS: Trying ElevenLabs, voice:', voiceId)
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
