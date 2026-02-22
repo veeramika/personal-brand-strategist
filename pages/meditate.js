@@ -8,55 +8,61 @@ const PHASE_SESSION = 'session'
 function useBinauralBeat() {
   const ctxRef = useRef(null)
   const nodesRef = useRef(null)
+  const [status, setStatus] = useState('idle') // idle | playing | error
 
-  function cleanup() {
+  const start = useCallback((freq) => {
+    // Clean up any previous session
+    try { nodesRef.current?.forEach(n => n.stop()) } catch {}
+    try { ctxRef.current?.close() } catch {}
+
     try {
-      nodesRef.current?.oscL?.stop()
-      nodesRef.current?.oscR?.stop()
-    } catch {}
+      const AC = window.AudioContext || window.webkitAudioContext
+      if (!AC) { setStatus('error'); return }
+
+      const ctx = new AC()
+      ctx.resume().then(() => {
+        const baseFreq = 150
+        const merger = ctx.createChannelMerger(2)
+        const gain = ctx.createGain()
+        gain.gain.value = 0.7
+        gain.connect(ctx.destination)
+        merger.connect(gain)
+
+        // Left ear: base frequency
+        const oscL = ctx.createOscillator()
+        oscL.type = 'sine'
+        oscL.frequency.value = baseFreq
+        oscL.connect(merger, 0, 0) // connect to left channel
+
+        // Right ear: base + binaural diff
+        const oscR = ctx.createOscillator()
+        oscR.type = 'sine'
+        oscR.frequency.value = baseFreq + freq
+        oscR.connect(merger, 0, 1) // connect to right channel
+
+        oscL.start()
+        oscR.start()
+
+        ctxRef.current = ctx
+        nodesRef.current = [oscL, oscR]
+        setStatus('playing')
+      })
+    } catch (e) {
+      console.error('Audio error:', e)
+      setStatus('error')
+    }
+  }, [])
+
+  const stop = useCallback(() => {
+    try { nodesRef.current?.forEach(n => n.stop()) } catch {}
     nodesRef.current = null
     try { ctxRef.current?.close() } catch {}
     ctxRef.current = null
-  }
-
-  const start = useCallback((freq) => {
-    cleanup()
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    // Resume context — required by Chrome/Safari autoplay policy
-    if (ctx.state === 'suspended') ctx.resume()
-
-    // Main binaural oscillators
-    const baseFreq = 150
-    const oscL = ctx.createOscillator()
-    const oscR = ctx.createOscillator()
-    oscL.type = 'sine'
-    oscR.type = 'sine'
-    oscL.frequency.value = baseFreq
-    oscR.frequency.value = baseFreq + freq
-
-    const panL = ctx.createStereoPanner()
-    const panR = ctx.createStereoPanner()
-    panL.pan.value = -1
-    panR.pan.value = 1
-
-    // Master gain — audible level
-    const gain = ctx.createGain()
-    gain.gain.value = 0.6
-    gain.connect(ctx.destination)
-
-    oscL.connect(panL).connect(gain)
-    oscR.connect(panR).connect(gain)
-    oscL.start()
-    oscR.start()
-
-    ctxRef.current = ctx
-    nodesRef.current = { oscL, oscR }
+    setStatus('idle')
   }, [])
 
-  const stop = useCallback(() => cleanup(), [])
-
-  useEffect(() => () => cleanup(), [])
-  return { start, stop }
+  useEffect(() => () => { try { nodesRef.current?.forEach(n => n.stop()) } catch {}; try { ctxRef.current?.close() } catch {} }, [])
+  return { start, stop, status }
 }
 
 /* ─── Speech-to-Text Hook ─── */
@@ -147,21 +153,17 @@ function SessionPlayer({ session, onReset }) {
     return () => clearInterval(timerRef.current)
   }, [playing, stepIdx, totalDuration, steps.length])
 
-  // Start/stop binaural audio with play state
   const toggle = () => {
-    setPlaying(p => {
-      if (!p) {
-        binaural.start(session.soundProfile.frequency)
-        setAudioOn(true)
-      } else {
-        binaural.stop()
-        setAudioOn(false)
-      }
-      return !p
-    })
+    if (!playing) {
+      binaural.start(session.soundProfile.frequency)
+      setPlaying(true)
+    } else {
+      binaural.stop()
+      setPlaying(false)
+    }
   }
 
-  useEffect(() => () => { binaural.stop() }, [binaural])
+  useEffect(() => () => binaural.stop(), [binaural])
   const goStep = useCallback((i) => { setStepIdx(i); setElapsed(0) }, [])
   const pct = totalDuration > 0 ? (elapsed / totalDuration) * 100 : 0
 
@@ -197,8 +199,11 @@ function SessionPlayer({ session, onReset }) {
           <button className="m-ctrl-btn" onClick={() => goStep(Math.min(steps.length - 1, stepIdx + 1))}>⏭</button>
         </div>
 
-        {audioOn && (
-          <p className="m-audio-indicator">🔊 {soundProfile.frequency}Hz {soundProfile.wave} binaural beat playing</p>
+        {binaural.status === 'playing' && (
+          <p className="m-audio-indicator">🔊 {soundProfile.frequency}Hz {soundProfile.wave} binaural beat playing — use headphones for best effect</p>
+        )}
+        {binaural.status === 'error' && (
+          <p className="m-audio-indicator" style={{color:'#f87171'}}>⚠ Audio not supported on this browser</p>
         )}
 
         <div className="m-card m-culture-card">
