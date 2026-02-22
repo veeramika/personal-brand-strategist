@@ -86,31 +86,58 @@ function BreathingLoader() {
 
 /* ─── Session Player ─── */
 function SessionPlayer({ session, onReset }) {
+  // Build unified steps: script steps + shloka as final step
+  const allSteps = [
+    ...session.script.steps,
+    { label: session.culturalElement.type, text: `${session.culturalElement.original}. ${session.culturalElement.translation}. ${session.culturalElement.context}`, isShloka: true }
+  ]
+  const totalSteps = allSteps.length
+
   const [stepIdx, setStepIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
-  const [showNav, setShowNav] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
   const timerRef = useRef(null)
   const audioCtxRef = useRef(null)
   const audioOscRef = useRef(null)
+  const ttsAudioRef = useRef(null)
   const ripple = useRipple()
 
-  const steps = session.script.steps
-  const current = steps[stepIdx]
-  const totalDuration = current.durationSec
+  const current = allSteps[stepIdx]
+  const isLast = stepIdx >= totalSteps - 1
+  const isShloka = current.isShloka
 
-  const ttsAudioRef = useRef(null)
+  // Per-step background gradient shift
+  const stepGradients = [
+    session.atmosphere.gradient,
+    ...session.script.steps.slice(1).map((_, i) => {
+      const hue = 220 + i * 25
+      return `linear-gradient(160deg, hsl(${hue},40%,8%) 0%, hsl(${hue + 30},35%,15%) 50%, hsl(${hue + 60},30%,12%) 100%)`
+    }),
+    // Shloka step: warm golden glow
+    'linear-gradient(160deg, #1a0a2e 0%, #4a2040 40%, #c4956a 100%)'
+  ]
+  const bg = stepGradients[stepIdx] || session.atmosphere.gradient
 
-  // Voice narration — try OpenAI TTS first, fallback to browser SpeechSynthesis
+  // Auto-advance when speech ends
+  function onSpeechEnd() {
+    setSpeaking(false)
+    // Brief pause after speech, then auto-advance
+    timerRef.current = setTimeout(() => {
+      if (isLast) { setPlaying(false) }
+      else { setStepIdx(i => i + 1) }
+    }, 2000) // 2s silence between steps
+  }
+
+  // Voice narration — speech-driven (no fixed timer)
   useEffect(() => {
     if (!playing) return
+    clearTimeout(timerRef.current)
     let cancelled = false
-
-    // Stop any previous narration
     if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
     window.speechSynthesis?.cancel()
+    setSpeaking(true)
 
-    // Try server TTS
+    // Try OpenAI TTS
     fetch('/api/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: current.text })
@@ -121,171 +148,124 @@ function SessionPlayer({ session, onReset }) {
       if (cancelled) return
       const audio = new Audio(URL.createObjectURL(blob))
       audio.volume = 0.95
+      audio.onended = () => { if (!cancelled) onSpeechEnd() }
       audio.play()
       ttsAudioRef.current = audio
     }).catch(() => {
-      // Fallback: browser SpeechSynthesis
       if (cancelled) return
       const u = new SpeechSynthesisUtterance(current.text)
       u.rate = 0.65; u.pitch = 0.8; u.volume = 0.9
       const voices = window.speechSynthesis?.getVoices() || []
-      const calm = voices.find(v => /samantha|karen|daniel|google uk|english.*female/i.test(v.name))
-        || voices.find(v => v.lang.startsWith('en'))
+      const calm = voices.find(v => /samantha|karen|daniel|google uk/i.test(v.name)) || voices.find(v => v.lang.startsWith('en'))
       if (calm) u.voice = calm
+      u.onend = () => { if (!cancelled) onSpeechEnd() }
       window.speechSynthesis?.speak(u)
     })
 
     return () => {
-      cancelled = true
+      cancelled = true; clearTimeout(timerRef.current)
       if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
       window.speechSynthesis?.cancel()
     }
-  }, [playing, stepIdx, current.text])
+  }, [playing, stepIdx])
 
-  // Timer
-  useEffect(() => {
-    if (!playing) { clearInterval(timerRef.current); return }
-    timerRef.current = setInterval(() => {
-      setElapsed(e => {
-        if (e + 1 >= totalDuration) {
-          if (stepIdx < steps.length - 1) { setStepIdx(i => i + 1); return 0 }
-          setPlaying(false); return totalDuration
-        }
-        return e + 1
-      })
-    }, 1000)
-    return () => clearInterval(timerRef.current)
-  }, [playing, stepIdx, totalDuration, steps.length])
+  // Raga audio engine (unchanged logic, extracted for clarity)
+  const RAGAS = {
+    darbari:      { notes: [130.81, 155.56, 174.61, 196.00, 233.08], character: 'heavy' },
+    shivaranjani: { notes: [196.00, 220.00, 233.08, 293.66, 329.63], character: 'poignant' },
+    punnagavarali:{ notes: [174.61, 185.00, 220.00, 261.63, 277.18], character: 'serpentine' },
+    ahirbhairav:  { notes: [146.83, 155.56, 185.00, 196.00, 220.00], character: 'devotional' },
+    hamsadhwani:  { notes: [261.63, 293.66, 329.63, 392.00, 493.88], character: 'bright' },
+    yaman:        { notes: [261.63, 293.66, 329.63, 370.00, 392.00], character: 'serene' },
+    bhimpalasi:   { notes: [196.00, 220.00, 233.08, 261.63, 293.66], character: 'soulful' },
+  }
 
   function startAudio() {
     const ac = new (window.AudioContext || window.webkitAudioContext)()
     ac.resume()
-
-    // Raga-inspired note sets (frequencies in Hz) — each creates a different emotional texture
-    const RAGAS = {
-      darbari:      { notes: [130.81, 155.56, 174.61, 196.00, 233.08], character: 'heavy' },    // C3 Eb3 F3 G3 Bb3 — deep, grounding
-      shivaranjani: { notes: [196.00, 220.00, 233.08, 293.66, 329.63], character: 'poignant' },  // G3 A3 Bb3 D4 E4 — minor, emotional
-      punnagavarali:{ notes: [174.61, 185.00, 220.00, 261.63, 277.18], character: 'serpentine' },// F3 Gb3 A3 C4 Db4 — controlled, cooling
-      ahirbhairav:  { notes: [146.83, 155.56, 185.00, 196.00, 220.00], character: 'devotional' },// D3 Eb3 Gb3 G3 A3 — warm dawn
-      hamsadhwani:  { notes: [261.63, 293.66, 329.63, 392.00, 493.88], character: 'bright' },   // C4 D4 E4 G4 B4 — pentatonic, joyful
-      yaman:        { notes: [261.63, 293.66, 329.63, 370.00, 392.00], character: 'serene' },    // C4 D4 E4 F#4 G4 — evening calm
-      bhimpalasi:   { notes: [196.00, 220.00, 233.08, 261.63, 293.66], character: 'soulful' },   // G3 A3 Bb3 C4 D4 — lifting
-    }
-
     const ragaKey = session.soundProfile?.raga || 'darbari'
     const raga = RAGAS[ragaKey] || RAGAS.darbari
-    const isHeavy = raga.character === 'heavy' || raga.character === 'serpentine'
-
-    // Master gain — soft ambient level (voice is primary)
     const master = ac.createGain()
-    master.gain.value = isHeavy ? 0.08 : 0.1
+    master.gain.value = raga.character === 'heavy' || raga.character === 'serpentine' ? 0.08 : 0.1
     master.connect(ac.destination)
-
     const nodes = []
 
-    // Drone: sustained root note with gentle volume oscillation
-    const drone = ac.createOscillator()
-    drone.type = 'sine'
-    drone.frequency.value = raga.notes[0]
-    const droneGain = ac.createGain()
-    droneGain.gain.value = 0.5
-    drone.connect(droneGain).connect(master)
-    drone.start()
-    nodes.push(drone)
+    const drone = ac.createOscillator(); drone.type = 'sine'; drone.frequency.value = raga.notes[0]
+    const dg = ac.createGain(); dg.gain.value = 0.5; drone.connect(dg).connect(master); drone.start(); nodes.push(drone)
 
-    // Drone LFO — slow volume swell for breathing feel
-    const lfo = ac.createOscillator()
-    lfo.type = 'sine'
-    lfo.frequency.value = 0.08 // one swell every ~12 seconds
-    const lfoGain = ac.createGain()
-    lfoGain.gain.value = 0.15
-    lfo.connect(lfoGain).connect(droneGain.gain)
-    lfo.start()
-    nodes.push(lfo)
+    const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.08
+    const lg = ac.createGain(); lg.gain.value = 0.15; lfo.connect(lg).connect(dg.gain); lfo.start(); nodes.push(lfo)
 
-    // Harmonic layer: soft fifth above root
-    const fifth = ac.createOscillator()
-    fifth.type = 'sine'
-    fifth.frequency.value = raga.notes[3] || raga.notes[0] * 1.5
-    const fifthGain = ac.createGain()
-    fifthGain.gain.value = 0.2
-    fifth.connect(fifthGain).connect(master)
-    fifth.start()
-    nodes.push(fifth)
+    const fifth = ac.createOscillator(); fifth.type = 'sine'; fifth.frequency.value = raga.notes[3] || raga.notes[0] * 1.5
+    const fg = ac.createGain(); fg.gain.value = 0.2; fifth.connect(fg).connect(master); fifth.start(); nodes.push(fifth)
 
-    // Melodic shimmer: cycle through raga notes very slowly
-    const melody = ac.createOscillator()
-    melody.type = 'triangle'
-    melody.frequency.value = raga.notes[1]
-    const melGain = ac.createGain()
-    melGain.gain.value = 0.12
-    melody.connect(melGain).connect(master)
-    melody.start()
-    nodes.push(melody)
+    const melody = ac.createOscillator(); melody.type = 'triangle'; melody.frequency.value = raga.notes[1]
+    const mg = ac.createGain(); mg.gain.value = 0.12; melody.connect(mg).connect(master); melody.start(); nodes.push(melody)
 
-    // Slowly shift melody note every 8 seconds
-    let noteIdx = 1
-    const melodyInterval = setInterval(() => {
-      noteIdx = (noteIdx + 1) % raga.notes.length
-      melody.frequency.setTargetAtTime(raga.notes[noteIdx], ac.currentTime, 2)
-    }, 8000)
+    let ni = 1
+    const mi = setInterval(() => { ni = (ni + 1) % raga.notes.length; melody.frequency.setTargetAtTime(raga.notes[ni], ac.currentTime, 2) }, 8000)
 
-    audioCtxRef.current = ac
-    audioOscRef.current = { nodes, melodyInterval }
+    audioCtxRef.current = ac; audioOscRef.current = { nodes, melodyInterval: mi }
   }
+
   function stopAudio() {
-    if (audioOscRef.current) {
-      clearInterval(audioOscRef.current.melodyInterval)
-      audioOscRef.current.nodes?.forEach(n => { try { n.stop() } catch {} })
-    }
+    clearTimeout(timerRef.current)
+    if (audioOscRef.current) { clearInterval(audioOscRef.current.melodyInterval); audioOscRef.current.nodes?.forEach(n => { try { n.stop() } catch {} }) }
     try { audioCtxRef.current?.close() } catch {}
     audioOscRef.current = null; audioCtxRef.current = null
     if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
     window.speechSynthesis?.cancel()
   }
+
   function toggle() {
-    if (playing) { stopAudio(); setPlaying(false) }
+    if (playing) { stopAudio(); setPlaying(false); setSpeaking(false) }
     else { startAudio(); setPlaying(true) }
   }
+
+  function goNext(e) { e?.stopPropagation(); if (!isLast) { clearTimeout(timerRef.current); setStepIdx(i => i + 1) } }
+  function goPrev(e) { e?.stopPropagation(); if (stepIdx > 0) { clearTimeout(timerRef.current); setStepIdx(i => i - 1) } }
+
   useEffect(() => () => stopAudio(), [])
-  const goStep = useCallback((i) => { setStepIdx(i); setElapsed(0) }, [])
-  const pct = totalDuration > 0 ? (elapsed / totalDuration) * 100 : 0
-  const { atmosphere, soundProfile, culturalElement } = session
+  const { soundProfile, culturalElement } = session
 
   return (
-    <div className="vv-session" style={{ '--atm': atmosphere.gradient }} onClick={ripple.add}>
+    <div className="vv-session" style={{ '--atm': bg }} onClick={ripple.add}>
       <Particles playing={playing} />
       <RippleLayer ripples={ripple.ripples} />
-
-      {/* Mesh gradient blobs */}
-      <div className="vv-mesh vv-mesh-1" />
-      <div className="vv-mesh vv-mesh-2" />
-      <div className="vv-mesh vv-mesh-3" />
+      <div className="vv-mesh vv-mesh-1" /><div className="vv-mesh vv-mesh-2" /><div className="vv-mesh vv-mesh-3" />
 
       <div className="vv-session-inner">
-        {/* Central breathing orb = play/pause */}
+        {/* Step counter */}
+        <p className="vv-step-counter">{stepIdx + 1} / {totalSteps}</p>
+
+        {/* Breathing orb = play/pause */}
         <div className="vv-orb-wrap">
-          <button className={`vv-orb ${playing ? 'vv-orb-breathe' : ''}`} onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
+          <button className={`vv-orb ${playing ? 'vv-orb-breathe' : ''}`} onClick={(e) => { e.stopPropagation(); toggle() }}>
             <span className="vv-orb-icon">{playing ? '⏸' : '▶'}</span>
           </button>
-          {playing && <p className="vv-orb-hint">🔊 Raga {session.soundProfile.raga || 'ambient'} · Voice narration</p>}
+          {playing && <p className="vv-orb-hint">🔊 Raga {soundProfile.raga || 'ambient'}</p>}
         </div>
 
-        {/* Script — glassmorphism card */}
-        <div className="vv-glass vv-script-card">
-          <div className="vv-step-label">{current.label}</div>
-          <p className="vv-script-text">{current.text}</p>
-          <div className="vv-bar-track"><div className="vv-bar-fill" style={{ width: `${pct}%` }} /></div>
-          <div className="vv-timer">{elapsed}s / {totalDuration}s</div>
+        {/* Script / Shloka card */}
+        <div className={`vv-glass ${isShloka ? 'vv-shloka-card' : 'vv-script-card'}`}>
+          {isShloka && <div className="vv-shloka-glow" />}
+          <div className={isShloka ? 'vv-shloka-type' : 'vv-step-label'}>{current.label}</div>
+          {isShloka ? (
+            <>
+              <p className="vv-shloka-original">{culturalElement.original}</p>
+              <p className="vv-shloka-translation">{culturalElement.translation}</p>
+              <p className="vv-shloka-context">{culturalElement.context}</p>
+            </>
+          ) : (
+            <p className="vv-script-text">{current.text}</p>
+          )}
+          {speaking && <div className="vv-speaking-dot" />}
         </div>
 
-        {/* Shloka / Cultural — celebrated */}
-        <div className="vv-glass vv-shloka-card">
-          <div className="vv-shloka-glow" />
-          <div className="vv-shloka-type">{culturalElement.type}</div>
-          <p className="vv-shloka-original">{culturalElement.original}</p>
-          <p className="vv-shloka-translation">{culturalElement.translation}</p>
-          <p className="vv-shloka-context">{culturalElement.context}</p>
+        {/* Navigation: prev / next */}
+        <div className="vv-nav-row" onClick={e => e.stopPropagation()}>
+          <button className="vv-nav-arrow" onClick={goPrev} disabled={stepIdx === 0}>← Prev</button>
+          <button className="vv-nav-arrow" onClick={goNext} disabled={isLast}>Next →</button>
         </div>
 
         {/* Sound badge */}
@@ -293,23 +273,6 @@ function SessionPlayer({ session, onReset }) {
           <span className="vv-sound-freq">{soundProfile.frequency}Hz {soundProfile.wave}</span>
           <span className="vv-sound-desc">{soundProfile.description}</span>
         </div>
-
-        {/* Hidden nav — tap to reveal */}
-        <div className="vv-nav-toggle">
-          <button className="vv-nav-btn" onClick={(e) => { e.stopPropagation(); setShowNav(v => !v) }}>
-            {showNav ? '✕' : `Step ${stepIdx + 1}/${steps.length}`}
-          </button>
-        </div>
-        {showNav && (
-          <div className="vv-glass vv-step-nav" onClick={e => e.stopPropagation()}>
-            {steps.map((s, i) => (
-              <button key={i} onClick={() => { goStep(i); setShowNav(false) }}
-                className={`vv-step-pill ${i === stepIdx ? 'active' : ''} ${i < stepIdx ? 'done' : ''}`}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
 
         <button className="vv-exit" onClick={(e) => { e.stopPropagation(); stopAudio(); onReset() }}>← New Session</button>
       </div>
@@ -549,22 +512,26 @@ const globalStyles = `
   .vv-sound-freq { font-size:13px; font-weight:600; color:#a78bfa; white-space:nowrap; }
   .vv-sound-desc { font-size:12px; color:rgba(255,255,255,0.4); line-height:1.4; }
 
-  /* Hidden nav */
-  .vv-nav-toggle { text-align:center; margin-bottom:12px; }
-  .vv-nav-btn {
-    padding:6px 16px; border-radius:20px; border:1px solid rgba(255,255,255,0.1);
-    background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.4);
-    font-size:12px; cursor:pointer; font-family:inherit; transition:all 0.2s;
+  /* Step counter */
+  .vv-step-counter { text-align:center; font-size:12px; color:rgba(255,255,255,0.3); letter-spacing:2px; margin-bottom:8px; }
+
+  /* Nav row */
+  .vv-nav-row { display:flex; justify-content:center; gap:12px; margin-bottom:20px; }
+  .vv-nav-arrow {
+    padding:8px 20px; border-radius:50px; border:1px solid rgba(255,255,255,0.1);
+    background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.5);
+    font-size:13px; cursor:pointer; font-family:inherit; transition:all 0.2s;
+    backdrop-filter:blur(8px);
   }
-  .vv-nav-btn:hover { color:#fff; border-color:rgba(255,255,255,0.2); }
-  .vv-step-nav { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; padding:16px; }
-  .vv-step-pill {
-    padding:8px 16px; border-radius:20px; border:1px solid rgba(255,255,255,0.1);
-    background:transparent; color:rgba(255,255,255,0.5); font-size:12px;
-    cursor:pointer; font-family:inherit; transition:all 0.3s;
+  .vv-nav-arrow:hover:not(:disabled) { color:#fff; border-color:rgba(255,255,255,0.25); background:rgba(255,255,255,0.08); }
+  .vv-nav-arrow:disabled { opacity:0.2; cursor:not-allowed; }
+
+  /* Speaking indicator */
+  .vv-speaking-dot {
+    width:8px; height:8px; border-radius:50%; background:#a78bfa; margin:12px auto 0;
+    animation:speakPulse 1.2s ease-in-out infinite;
   }
-  .vv-step-pill.active { background:rgba(139,92,246,0.2); color:#fff; border-color:rgba(139,92,246,0.4); }
-  .vv-step-pill.done { color:rgba(52,211,153,0.7); border-color:rgba(52,211,153,0.2); }
+  @keyframes speakPulse { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.5)} }
 
   .vv-exit {
     display:block; margin:28px auto 0; padding:10px 24px; border-radius:50px;
