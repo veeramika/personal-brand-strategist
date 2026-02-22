@@ -61,6 +61,17 @@ function SessionPlayer({ session, onReset }) {
   const current = steps[stepIdx]
   const totalDuration = current.durationSec
 
+  // Speak current step text when step changes while playing
+  useEffect(() => {
+    if (!playing) return
+    window.speechSynthesis?.cancel()
+    const utter = new SpeechSynthesisUtterance(current.text)
+    utter.rate = 0.85
+    utter.pitch = 0.95
+    window.speechSynthesis?.speak(utter)
+    return () => window.speechSynthesis?.cancel()
+  }, [playing, stepIdx, current.text])
+
   useEffect(() => {
     if (!playing) { clearInterval(timerRef.current); return }
     timerRef.current = setInterval(() => {
@@ -76,7 +87,6 @@ function SessionPlayer({ session, onReset }) {
   }, [playing, stepIdx, totalDuration, steps.length])
 
   function startAudio() {
-    // Exact same code as the working test beep — just longer
     const ac = new (window.AudioContext || window.webkitAudioContext)()
     ac.resume()
     const o = ac.createOscillator()
@@ -93,6 +103,7 @@ function SessionPlayer({ session, onReset }) {
     try { audioCtxRef.current?.close() } catch {}
     audioOscRef.current = null
     audioCtxRef.current = null
+    window.speechSynthesis?.cancel()
   }
 
   function toggle() {
@@ -133,7 +144,7 @@ function SessionPlayer({ session, onReset }) {
           <button className="m-ctrl-btn" onClick={() => goStep(Math.min(steps.length - 1, stepIdx + 1))}>⏭</button>
         </div>
 
-        {playing && <p className="m-audio-indicator">🔊 Ambient tone playing</p>}
+        {playing && <p className="m-audio-indicator">🔊 Ambient tone + voice narration</p>}
 
         <div className="m-card m-culture-card">
           <div className="m-culture-type">{culturalElement.type}</div>
