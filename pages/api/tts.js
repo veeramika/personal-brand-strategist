@@ -3,8 +3,9 @@
 
 async function elevenLabs(text) {
   const key = process.env.ELEVENLABS_API_KEY
-  if (!key) return null
+  if (!key) { console.log('TTS: No ELEVENLABS_API_KEY'); return null }
   const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'
+  console.log('TTS: Trying ElevenLabs, voice:', voiceId)
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'xi-api-key': key },
@@ -14,19 +15,30 @@ async function elevenLabs(text) {
       voice_settings: { stability: 0.7, similarity_boost: 0.75, style: 0.4, use_speaker_boost: true }
     })
   })
-  if (!r.ok) return null
+  if (!r.ok) {
+    const err = await r.text().catch(() => r.status)
+    console.error('TTS: ElevenLabs failed:', r.status, err)
+    return null
+  }
+  console.log('TTS: ElevenLabs success')
   return Buffer.from(await r.arrayBuffer())
 }
 
 async function openaiTTS(text) {
   const key = process.env.OPENAI_API_KEY
-  if (!key) return null
+  if (!key) { console.log('TTS: No OPENAI_API_KEY'); return null }
+  console.log('TTS: Trying OpenAI')
   const r = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: 'tts-1-hd', voice: 'alloy', input: text, speed: 0.75 })
   })
-  if (!r.ok) return null
+  if (!r.ok) {
+    const err = await r.text().catch(() => r.status)
+    console.error('TTS: OpenAI failed:', r.status, err)
+    return null
+  }
+  console.log('TTS: OpenAI success')
   return Buffer.from(await r.arrayBuffer())
 }
 
@@ -39,7 +51,10 @@ export default async function handler(req, res) {
 
   try {
     const audio = await elevenLabs(processed) || await openaiTTS(processed)
-    if (audio) { res.setHeader('Content-Type', 'audio/mpeg'); return res.send(audio) }
+    if (audio) {
+      res.setHeader('Content-Type', 'audio/mpeg')
+      return res.send(audio)
+    }
     return res.status(404).json({ error: 'no tts available' })
   } catch (err) {
     console.error('TTS error:', err.message)
