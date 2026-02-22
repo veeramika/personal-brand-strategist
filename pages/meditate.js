@@ -4,90 +4,22 @@ const PHASE_INPUT = 'input'
 const PHASE_LOADING = 'loading'
 const PHASE_SESSION = 'session'
 
-/* ─── Binaural Beat Engine (Web Audio API) ─── */
-function useBinauralBeat() {
-  const ctxRef = useRef(null)
-  const nodesRef = useRef(null)
-  const [status, setStatus] = useState('idle')
-
-  const start = useCallback((freq) => {
-    try { nodesRef.current?.forEach(n => n.stop()) } catch {}
-    try { ctxRef.current?.close() } catch {}
-
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext
-      if (!AC) { setStatus('error'); return }
-
-      const ctx = new AC()
-      // Resume but don't wait — create nodes synchronously in user gesture
-      ctx.resume()
-
-      const gain = ctx.createGain()
-      gain.gain.value = 0.5
-      gain.connect(ctx.destination)
-
-      const oscL = ctx.createOscillator()
-      oscL.frequency.value = 150
-      oscL.type = 'sine'
-      oscL.connect(gain)
-      oscL.start()
-
-      const oscR = ctx.createOscillator()
-      oscR.frequency.value = 150 + freq
-      oscR.type = 'sine'
-      oscR.connect(gain)
-      oscR.start()
-
-      ctxRef.current = ctx
-      nodesRef.current = [oscL, oscR]
-      setStatus('playing')
-    } catch (e) {
-      console.error('Audio error:', e)
-      setStatus('error')
-    }
-  }, [])
-
-  const stop = useCallback(() => {
-    try { nodesRef.current?.forEach(n => n.stop()) } catch {}
-    nodesRef.current = null
-    try { ctxRef.current?.close() } catch {}
-    ctxRef.current = null
-    setStatus('idle')
-  }, [])
-
-  useEffect(() => () => { try { nodesRef.current?.forEach(n => n.stop()) } catch {}; try { ctxRef.current?.close() } catch {} }, [])
-  return { start, stop, status }
-}
-
 /* ─── Speech-to-Text Hook ─── */
 function useSpeechToText(onResult) {
   const [listening, setListening] = useState(false)
   const recRef = useRef(null)
-
   const supported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
 
   const toggle = useCallback(() => {
     if (!supported) return
-    if (listening) {
-      recRef.current?.stop()
-      setListening(false)
-      return
-    }
+    if (listening) { recRef.current?.stop(); setListening(false); return }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
     const rec = new SR()
-    rec.lang = 'en-US'
-    rec.interimResults = false
-    rec.continuous = false
-    rec.onresult = (e) => {
-      const text = e.results[0][0].transcript
-      onResult(text)
-      setListening(false)
-    }
+    rec.lang = 'en-US'; rec.interimResults = false; rec.continuous = false
+    rec.onresult = (e) => { onResult(e.results[0][0].transcript); setListening(false) }
     rec.onerror = () => setListening(false)
     rec.onend = () => setListening(false)
-    rec.start()
-    recRef.current = rec
-    setListening(true)
+    rec.start(); recRef.current = rec; setListening(true)
   }, [listening, supported, onResult])
 
   return { listening, toggle, supported }
@@ -108,10 +40,7 @@ function BreathingLoader() {
           box-shadow: 0 0 40px rgba(139,92,246,0.3), inset 0 0 40px rgba(139,92,246,0.1);
           animation: breathe 5s ease-in-out infinite;
         }
-        @keyframes breathe {
-          0%,100% { transform:scale(0.8); opacity:0.5; }
-          50% { transform:scale(1.2); opacity:1; }
-        }
+        @keyframes breathe { 0%,100% { transform:scale(0.8); opacity:0.5; } 50% { transform:scale(1.2); opacity:1; } }
         .m-loader-text { font-size:18px; font-weight:500; color:#e2e8f0; }
         .m-loader-sub { font-size:14px; color:#7a8599; }
       `}</style>
@@ -124,9 +53,9 @@ function SessionPlayer({ session, onReset }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  const [audioOn, setAudioOn] = useState(false)
   const timerRef = useRef(null)
-  const binaural = useBinauralBeat()
+  const audioCtxRef = useRef(null)
+  const audioOscRef = useRef(null)
 
   const steps = session.script.steps
   const current = steps[stepIdx]
@@ -138,8 +67,7 @@ function SessionPlayer({ session, onReset }) {
       setElapsed(e => {
         if (e + 1 >= totalDuration) {
           if (stepIdx < steps.length - 1) { setStepIdx(i => i + 1); return 0 }
-          setPlaying(false)
-          return totalDuration
+          setPlaying(false); return totalDuration
         }
         return e + 1
       })
@@ -147,20 +75,34 @@ function SessionPlayer({ session, onReset }) {
     return () => clearInterval(timerRef.current)
   }, [playing, stepIdx, totalDuration, steps.length])
 
-  const toggle = () => {
-    if (!playing) {
-      binaural.start(session.soundProfile.frequency)
-      setPlaying(true)
-    } else {
-      binaural.stop()
-      setPlaying(false)
-    }
+  function startAudio() {
+    // Exact same code as the working test beep — just longer
+    const ac = new (window.AudioContext || window.webkitAudioContext)()
+    ac.resume()
+    const o = ac.createOscillator()
+    o.frequency.value = 174
+    o.type = 'sine'
+    o.connect(ac.destination)
+    o.start()
+    audioCtxRef.current = ac
+    audioOscRef.current = o
   }
 
-  useEffect(() => () => binaural.stop(), [binaural])
+  function stopAudio() {
+    try { audioOscRef.current?.stop() } catch {}
+    try { audioCtxRef.current?.close() } catch {}
+    audioOscRef.current = null
+    audioCtxRef.current = null
+  }
+
+  function toggle() {
+    if (playing) { stopAudio(); setPlaying(false) }
+    else { startAudio(); setPlaying(true) }
+  }
+
+  useEffect(() => () => stopAudio(), [])
   const goStep = useCallback((i) => { setStepIdx(i); setElapsed(0) }, [])
   const pct = totalDuration > 0 ? (elapsed / totalDuration) * 100 : 0
-
   const { atmosphere, soundProfile, culturalElement } = session
 
   return (
@@ -187,35 +129,11 @@ function SessionPlayer({ session, onReset }) {
 
         <div className="m-controls">
           <button className="m-ctrl-btn" onClick={() => goStep(Math.max(0, stepIdx - 1))}>⏮</button>
-          <button className="m-ctrl-btn m-play-btn" onClick={toggle}>
-            {playing ? '⏸' : '▶'}
-          </button>
+          <button className="m-ctrl-btn m-play-btn" onClick={toggle}>{playing ? '⏸' : '▶'}</button>
           <button className="m-ctrl-btn" onClick={() => goStep(Math.min(steps.length - 1, stepIdx + 1))}>⏭</button>
         </div>
 
-        {/* Debug: test raw audio */}
-        <div style={{ textAlign: 'center', marginBottom: 12 }}>
-          <button style={{ fontSize: 12, padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#a78bfa', cursor: 'pointer', fontFamily: 'inherit' }}
-            onClick={() => {
-              const ac = new (window.AudioContext || window.webkitAudioContext)()
-              ac.resume().then(() => {
-                const o = ac.createOscillator()
-                o.frequency.value = 440
-                o.connect(ac.destination)
-                o.start()
-                setTimeout(() => { o.stop(); ac.close() }, 1000)
-              })
-            }}>
-            🔈 Test Audio (1s beep)
-          </button>
-        </div>
-
-        {binaural.status === 'playing' && (
-          <p className="m-audio-indicator">🔊 {soundProfile.frequency}Hz {soundProfile.wave} binaural beat playing — use headphones for best effect</p>
-        )}
-        {binaural.status === 'error' && (
-          <p className="m-audio-indicator" style={{color:'#f87171'}}>⚠ Audio not supported on this browser</p>
-        )}
+        {playing && <p className="m-audio-indicator">🔊 Ambient tone playing</p>}
 
         <div className="m-card m-culture-card">
           <div className="m-culture-type">{culturalElement.type}</div>
@@ -229,7 +147,7 @@ function SessionPlayer({ session, onReset }) {
           <span className="m-sound-desc">{soundProfile.description}</span>
         </div>
 
-        <button className="m-reset-btn" onClick={() => { binaural.stop(); onReset() }}>← New Session</button>
+        <button className="m-reset-btn" onClick={() => { stopAudio(); onReset() }}>← New Session</button>
       </div>
 
       <style jsx>{`
@@ -237,58 +155,32 @@ function SessionPlayer({ session, onReset }) {
         .m-session-inner { max-width:680px; margin:0 auto; padding:48px 20px 64px; }
         .m-brand-tag { text-align:center; font-size:12px; text-transform:uppercase; letter-spacing:2px; color:rgba(255,255,255,0.35); margin-bottom:8px; }
         .m-title { font-size:28px; font-weight:700; text-align:center; margin-bottom:28px; color:#fff; text-shadow:0 2px 20px rgba(0,0,0,0.4); }
-
         .m-step-nav { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:24px; }
-        .m-step-btn {
-          padding:6px 14px; border-radius:20px; border:1px solid rgba(255,255,255,0.15);
-          background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.6); font-size:12px;
-          cursor:pointer; transition:all 0.3s; font-family:inherit;
-        }
+        .m-step-btn { padding:6px 14px; border-radius:20px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.6); font-size:12px; cursor:pointer; transition:all 0.3s; font-family:inherit; }
         .m-step-btn.active { background:rgba(255,255,255,0.18); color:#fff; border-color:rgba(255,255,255,0.3); }
         .m-step-btn.done { color:rgba(52,211,153,0.8); border-color:rgba(52,211,153,0.3); }
-
         .m-card { background:rgba(0,0,0,0.25); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:24px; margin-bottom:16px; }
-
         .m-step-label { font-size:13px; text-transform:uppercase; letter-spacing:0.5px; color:rgba(255,255,255,0.5); margin-bottom:12px; }
         .m-script-text { font-size:17px; line-height:1.7; color:rgba(255,255,255,0.9); margin-bottom:20px; }
-
         .m-progress-track { height:4px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; }
         .m-progress-fill { height:100%; background:linear-gradient(90deg,#8b5cf6,#a78bfa); border-radius:4px; transition:width 1s linear; }
         .m-timer { font-size:12px; color:rgba(255,255,255,0.4); margin-top:8px; text-align:right; }
-
         .m-controls { display:flex; justify-content:center; gap:16px; margin-bottom:16px; }
-        .m-ctrl-btn {
-          width:48px; height:48px; border-radius:50%; border:1px solid rgba(255,255,255,0.15);
-          background:rgba(255,255,255,0.08); color:#fff; font-size:18px; cursor:pointer;
-          display:flex; align-items:center; justify-content:center; transition:all 0.2s; font-family:inherit;
-        }
+        .m-ctrl-btn { width:48px; height:48px; border-radius:50%; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.08); color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; font-family:inherit; }
         .m-ctrl-btn:hover { background:rgba(255,255,255,0.15); }
         .m-play-btn { width:56px; height:56px; font-size:22px; background:rgba(139,92,246,0.3); border-color:rgba(139,92,246,0.5); }
-
         .m-audio-indicator { text-align:center; font-size:12px; color:rgba(167,139,250,0.7); margin-bottom:20px; }
-
         .m-culture-card { text-align:center; }
         .m-culture-type { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.4); margin-bottom:12px; }
         .m-culture-original { font-size:22px; font-weight:500; color:#fff; margin-bottom:8px; line-height:1.5; }
         .m-culture-translation { font-size:15px; color:rgba(255,255,255,0.7); font-style:italic; margin-bottom:12px; line-height:1.5; }
         .m-culture-context { font-size:13px; color:rgba(255,255,255,0.4); line-height:1.5; }
-
         .m-sound-card { display:flex; align-items:center; gap:14px; }
         .m-sound-freq { font-size:14px; font-weight:600; color:#a78bfa; white-space:nowrap; }
         .m-sound-desc { font-size:13px; color:rgba(255,255,255,0.5); line-height:1.4; }
-
-        .m-reset-btn {
-          display:block; margin:24px auto 0; padding:10px 24px; border-radius:8px;
-          border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06);
-          color:rgba(255,255,255,0.6); font-size:14px; cursor:pointer; font-family:inherit; transition:all 0.2s;
-        }
+        .m-reset-btn { display:block; margin:24px auto 0; padding:10px 24px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.6); font-size:14px; cursor:pointer; font-family:inherit; transition:all 0.2s; }
         .m-reset-btn:hover { background:rgba(255,255,255,0.1); color:#fff; }
-
-        @media(max-width:600px) {
-          .m-title { font-size:22px; }
-          .m-script-text { font-size:15px; }
-          .m-culture-original { font-size:18px; }
-        }
+        @media(max-width:600px) { .m-title { font-size:22px; } .m-script-text { font-size:15px; } .m-culture-original { font-size:18px; } }
       `}</style>
     </div>
   )
@@ -337,14 +229,9 @@ export default function Meditate() {
         <form onSubmit={submit} className="m-form">
           <label className="m-label" htmlFor="mood-input">How is your heart / mind feeling right now?</label>
           <div className="m-input-row">
-            <textarea
-              id="mood-input"
-              className="m-textarea"
-              rows={3}
-              value={mood}
+            <textarea id="mood-input" className="m-textarea" rows={3} value={mood}
               onChange={e => setMood(e.target.value)}
-              placeholder="e.g. I'm feeling high-anxiety and can't stop overthinking…"
-            />
+              placeholder="e.g. I'm feeling high-anxiety and can't stop overthinking…" />
             {speech.supported && (
               <button type="button" className={`m-mic-btn ${speech.listening ? 'listening' : ''}`} onClick={speech.toggle} aria-label="Voice input">
                 {speech.listening ? '⏹' : '🎙'}
@@ -354,8 +241,7 @@ export default function Meditate() {
           {speech.listening && <p className="m-listening">Listening… speak now</p>}
           <button type="submit" className="m-submit" disabled={!mood.trim()}>Begin Session ✨</button>
         </form>
-
-        <p className="m-footer">Guided scripts · Vedic shlokas · Binaural beats · Adaptive visuals</p>
+        <p className="m-footer">Guided scripts · Vedic shlokas · Ambient soundscapes · Adaptive visuals</p>
       </div>
 
       <style jsx>{`
@@ -364,40 +250,21 @@ export default function Meditate() {
         .m-logo { font-size:48px; margin-bottom:16px; }
         .m-heading { font-size:36px; font-weight:700; background:linear-gradient(135deg,#fff,#c4b5fd); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; letter-spacing:-0.5px; }
         .m-sub { color:#7a8599; font-size:15px; margin-bottom:36px; line-height:1.5; }
-
         .m-form { text-align:left; }
         .m-label { display:block; font-size:14px; font-weight:500; color:#a78bfa; margin-bottom:10px; }
-
         .m-input-row { position:relative; }
-        .m-textarea {
-          width:100%; padding:14px 52px 14px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);
-          background:rgba(255,255,255,0.04); color:#e2e8f0; font-size:15px; font-family:inherit;
-          resize:vertical; outline:none; transition:border-color 0.2s, box-shadow 0.2s; line-height:1.5;
-        }
+        .m-textarea { width:100%; padding:14px 52px 14px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#e2e8f0; font-size:15px; font-family:inherit; resize:vertical; outline:none; transition:border-color 0.2s, box-shadow 0.2s; line-height:1.5; }
         .m-textarea:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px rgba(139,92,246,0.25); }
         .m-textarea::placeholder { color:#4a5568; }
-
-        .m-mic-btn {
-          position:absolute; right:10px; top:10px; width:36px; height:36px; border-radius:50%;
-          border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06);
-          color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center;
-          transition:all 0.2s; font-family:inherit;
-        }
+        .m-mic-btn { position:absolute; right:10px; top:10px; width:36px; height:36px; border-radius:50%; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; font-family:inherit; }
         .m-mic-btn:hover { background:rgba(255,255,255,0.12); }
         .m-mic-btn.listening { background:rgba(239,68,68,0.3); border-color:rgba(239,68,68,0.5); animation:mic-pulse 1.5s ease-in-out infinite; }
         @keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.3)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
-
-        .m-listening { font-size:13px; color:#ef4444; margin-top:8px; animation:mic-pulse 1.5s ease-in-out infinite; }
-
-        .m-submit {
-          margin-top:16px; width:100%; padding:14px; border-radius:10px; border:none;
-          background:linear-gradient(135deg,#7c3aed,#8b5cf6); color:#fff; font-size:16px;
-          font-weight:600; cursor:pointer; font-family:inherit; transition:opacity 0.2s, transform 0.15s;
-        }
+        .m-listening { font-size:13px; color:#ef4444; margin-top:8px; }
+        .m-submit { margin-top:16px; width:100%; padding:14px; border-radius:10px; border:none; background:linear-gradient(135deg,#7c3aed,#8b5cf6); color:#fff; font-size:16px; font-weight:600; cursor:pointer; font-family:inherit; transition:opacity 0.2s, transform 0.15s; }
         .m-submit:hover:not(:disabled) { opacity:0.9; }
         .m-submit:active:not(:disabled) { transform:scale(0.98); }
         .m-submit:disabled { opacity:0.4; cursor:not-allowed; }
-
         .m-footer { margin-top:28px; font-size:12px; color:#4a5568; }
       `}</style>
     </main>
