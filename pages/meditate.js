@@ -99,12 +99,18 @@ function SessionPlayer({ session, onReset }) {
   const current = steps[stepIdx]
   const totalDuration = current.durationSec
 
-  // Voice narration
+  // Voice narration — slow, monk-like pace
   useEffect(() => {
     if (!playing) return
     window.speechSynthesis?.cancel()
     const u = new SpeechSynthesisUtterance(current.text)
-    u.rate = 0.85; u.pitch = 0.95
+    u.rate = 0.6    // slow, deliberate monk pace
+    u.pitch = 0.85  // deeper, calmer tone
+    u.volume = 0.9
+    // Prefer a calm English voice if available
+    const voices = window.speechSynthesis?.getVoices() || []
+    const calm = voices.find(v => /samantha|karen|daniel|google uk/i.test(v.name)) || voices.find(v => v.lang.startsWith('en'))
+    if (calm) u.voice = calm
     window.speechSynthesis?.speak(u)
     return () => window.speechSynthesis?.cancel()
   }, [playing, stepIdx, current.text])
@@ -127,13 +133,84 @@ function SessionPlayer({ session, onReset }) {
   function startAudio() {
     const ac = new (window.AudioContext || window.webkitAudioContext)()
     ac.resume()
-    const o = ac.createOscillator()
-    o.frequency.value = 174; o.type = 'sine'
-    o.connect(ac.destination); o.start()
-    audioCtxRef.current = ac; audioOscRef.current = o
+
+    // Raga-inspired note sets (frequencies in Hz) — each creates a different emotional texture
+    const RAGAS = {
+      darbari:      { notes: [130.81, 155.56, 174.61, 196.00, 233.08], character: 'heavy' },    // C3 Eb3 F3 G3 Bb3 — deep, grounding
+      shivaranjani: { notes: [196.00, 220.00, 233.08, 293.66, 329.63], character: 'poignant' },  // G3 A3 Bb3 D4 E4 — minor, emotional
+      punnagavarali:{ notes: [174.61, 185.00, 220.00, 261.63, 277.18], character: 'serpentine' },// F3 Gb3 A3 C4 Db4 — controlled, cooling
+      ahirbhairav:  { notes: [146.83, 155.56, 185.00, 196.00, 220.00], character: 'devotional' },// D3 Eb3 Gb3 G3 A3 — warm dawn
+      hamsadhwani:  { notes: [261.63, 293.66, 329.63, 392.00, 493.88], character: 'bright' },   // C4 D4 E4 G4 B4 — pentatonic, joyful
+      yaman:        { notes: [261.63, 293.66, 329.63, 370.00, 392.00], character: 'serene' },    // C4 D4 E4 F#4 G4 — evening calm
+      bhimpalasi:   { notes: [196.00, 220.00, 233.08, 261.63, 293.66], character: 'soulful' },   // G3 A3 Bb3 C4 D4 — lifting
+    }
+
+    const ragaKey = session.soundProfile?.raga || 'darbari'
+    const raga = RAGAS[ragaKey] || RAGAS.darbari
+    const isHeavy = raga.character === 'heavy' || raga.character === 'serpentine'
+
+    // Master gain — soft ambient level (voice is primary)
+    const master = ac.createGain()
+    master.gain.value = isHeavy ? 0.08 : 0.1
+    master.connect(ac.destination)
+
+    const nodes = []
+
+    // Drone: sustained root note with gentle volume oscillation
+    const drone = ac.createOscillator()
+    drone.type = 'sine'
+    drone.frequency.value = raga.notes[0]
+    const droneGain = ac.createGain()
+    droneGain.gain.value = 0.5
+    drone.connect(droneGain).connect(master)
+    drone.start()
+    nodes.push(drone)
+
+    // Drone LFO — slow volume swell for breathing feel
+    const lfo = ac.createOscillator()
+    lfo.type = 'sine'
+    lfo.frequency.value = 0.08 // one swell every ~12 seconds
+    const lfoGain = ac.createGain()
+    lfoGain.gain.value = 0.15
+    lfo.connect(lfoGain).connect(droneGain.gain)
+    lfo.start()
+    nodes.push(lfo)
+
+    // Harmonic layer: soft fifth above root
+    const fifth = ac.createOscillator()
+    fifth.type = 'sine'
+    fifth.frequency.value = raga.notes[3] || raga.notes[0] * 1.5
+    const fifthGain = ac.createGain()
+    fifthGain.gain.value = 0.2
+    fifth.connect(fifthGain).connect(master)
+    fifth.start()
+    nodes.push(fifth)
+
+    // Melodic shimmer: cycle through raga notes very slowly
+    const melody = ac.createOscillator()
+    melody.type = 'triangle'
+    melody.frequency.value = raga.notes[1]
+    const melGain = ac.createGain()
+    melGain.gain.value = 0.12
+    melody.connect(melGain).connect(master)
+    melody.start()
+    nodes.push(melody)
+
+    // Slowly shift melody note every 8 seconds
+    let noteIdx = 1
+    const melodyInterval = setInterval(() => {
+      noteIdx = (noteIdx + 1) % raga.notes.length
+      melody.frequency.setTargetAtTime(raga.notes[noteIdx], ac.currentTime, 2)
+    }, 8000)
+
+    audioCtxRef.current = ac
+    audioOscRef.current = { nodes, melodyInterval }
   }
   function stopAudio() {
-    try { audioOscRef.current?.stop() } catch {}
+    if (audioOscRef.current) {
+      clearInterval(audioOscRef.current.melodyInterval)
+      audioOscRef.current.nodes?.forEach(n => { try { n.stop() } catch {} })
+    }
     try { audioCtxRef.current?.close() } catch {}
     audioOscRef.current = null; audioCtxRef.current = null
     window.speechSynthesis?.cancel()
@@ -163,7 +240,7 @@ function SessionPlayer({ session, onReset }) {
           <button className={`vv-orb ${playing ? 'vv-orb-breathe' : ''}`} onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
             <span className="vv-orb-icon">{playing ? '⏸' : '▶'}</span>
           </button>
-          {playing && <p className="vv-orb-hint">🔊 Ambient + Voice</p>}
+          {playing && <p className="vv-orb-hint">🔊 Raga {session.soundProfile.raga || 'ambient'} · Voice narration</p>}
         </div>
 
         {/* Script — glassmorphism card */}

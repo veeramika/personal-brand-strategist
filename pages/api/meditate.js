@@ -24,7 +24,7 @@ Return ONLY valid JSON (no markdown, no backticks):
 {
   "script": { "title": "string", "steps": [ { "label": "string", "text": "string (50-80 words)", "durationSec": number } ] },
   "atmosphere": { "name": "string", "gradient": "linear-gradient(...) CSS value", "animation": "gentle|pulse|wave|still" },
-  "soundProfile": { "frequency": number, "wave": "Theta|Alpha|Beta|Delta", "description": "string" },
+  "soundProfile": { "frequency": number, "wave": "Theta|Alpha|Beta|Delta", "raga": "darbari|shivaranjani|punnagavarali|ahirbhairav|hamsadhwani|yaman|bhimpalasi", "description": "string" },
   "culturalElement": { "type": "Shloka|Mantra|Affirmation", "original": "string (Sanskrit if shloka/mantra)", "translation": "string", "context": "string (why this was chosen for THIS person's state)" }
 }
 
@@ -49,7 +49,7 @@ const MOCKS = {
       { label: "Return", text: "The storm hasn't disappeared — but you've found the eye of it. That calm center has always been inside you. Wiggle your fingers. Take one deep breath. When you open your eyes, carry this stillness like an anchor. You are stronger than any wave. Namaste.", durationSec: 45 }
     ]},
     atmosphere: { name: "Deep Indigo Night", gradient: "linear-gradient(160deg, #0f0c29 0%, #1a1040 40%, #302b63 100%)", animation: "gentle" },
-    soundProfile: { frequency: 5, wave: "Theta", description: "5Hz Theta waves calm the amygdala's fight-or-flight response, guiding your nervous system from sympathetic to parasympathetic mode." },
+    soundProfile: { frequency: 5, wave: "Theta", raga: "darbari", description: "Raga Darbari Kanada — deep, heavy, slow-moving notes that lower cortisol and anchor a vibrating nervous system. Paired with 5Hz Theta waves." },
     culturalElement: { type: "Shloka", original: "ॐ असतो मा सद्गमय। तमसो मा ज्योतिर्गमय। मृत्योर्मा अमृतं गमय।", translation: "Lead me from the unreal to the real. Lead me from darkness to light. Lead me from death to immortality.", context: "This Brihadaranyaka Upanishad prayer is chosen because anxiety often traps us in unreal fears. This shloka is a gentle reminder that you can move from the darkness of worry into the light of presence." }
   },
 
@@ -62,7 +62,7 @@ const MOCKS = {
       { label: "Gentle Return", text: "Take a slow, deep breath. You don't need to feel better right now — you just need to feel held. And you are. Wiggle your toes. When you're ready, open your eyes softly. The sadness may still be there, but so is your strength. They have always coexisted. Namaste.", durationSec: 45 }
     ]},
     atmosphere: { name: "Amber Twilight", gradient: "linear-gradient(160deg, #1a0a2e 0%, #4a2040 40%, #c4956a 100%)", animation: "gentle" },
-    soundProfile: { frequency: 9, wave: "Alpha", description: "9Hz Alpha waves promote emotional processing and gentle self-compassion, helping the brain move from rumination to acceptance." },
+    soundProfile: { frequency: 9, wave: "Alpha", raga: "shivaranjani", description: "Raga Shivaranjani — poignant, pure emotion with Komal Ga (minor 3rd). Facilitates catharsis and gentle release of stored grief. Paired with 9Hz Alpha waves." },
     culturalElement: { type: "Shloka", original: "वसुधैव कुटुम्बकम्", translation: "The whole world is one family.", context: "From the Maha Upanishad, this shloka is chosen because loneliness and sadness often make us feel isolated. This ancient truth reminds you that you are woven into the fabric of all humanity — never truly alone." }
   },
 
@@ -75,7 +75,7 @@ const MOCKS = {
       { label: "Launch", text: "Take the deepest breath of your day. Hold it — feel your lungs full of possibility. Now exhale with force, like you're blowing open every door in front of you. Open your eyes. You are not just having a good day — you are becoming the person who has good days on purpose. Go shine. Namaste.", durationSec: 45 }
     ]},
     atmosphere: { name: "Sunrise Gold", gradient: "linear-gradient(160deg, #fef3c7 0%, #f59e0b 30%, #ec4899 70%, #8b5cf6 100%)", animation: "pulse" },
-    soundProfile: { frequency: 16, wave: "Beta", description: "16Hz Beta waves enhance focus, confidence, and creative energy — perfect for channeling your positive state into purposeful action." },
+    soundProfile: { frequency: 16, wave: "Beta", raga: "hamsadhwani", description: "Raga Hamsadhwani — bright, pentatonic, uplifting. Enhances clarity, mental sharpness, and pure joy. Paired with 16Hz Beta waves." },
     culturalElement: { type: "Affirmation", original: "अहं ब्रह्मास्मि", translation: "I am the infinite. I am the universe experiencing itself through this body, this mind, this moment.", context: "This Mahavakya from the Brihadaranyaka Upanishad is chosen because when you're already in a state of joy, you're closest to your true nature. This affirmation amplifies that truth — you are not small. You are boundless." }
   },
 
@@ -88,7 +88,7 @@ const MOCKS = {
       { label: "Rise", text: "Take a warrior's breath — inhale through the nose with power, exhale through the mouth with a quiet 'Ha.' Again. One more. Feel your spine straighten. Feel your chin lift. You are not the person who gave up. You are the person who showed up — even when it was hard. That is the definition of courage. Now go take that one step. Namaste.", durationSec: 50 }
     ]},
     atmosphere: { name: "Dawn Breaking", gradient: "linear-gradient(160deg, #1a1a2e 0%, #e67e22 50%, #f1c40f 100%)", animation: "wave" },
-    soundProfile: { frequency: 12, wave: "Alpha", description: "12Hz Alpha waves bridge relaxation and alertness, gently reigniting motivation without overwhelming a tired mind." },
+    soundProfile: { frequency: 12, wave: "Alpha", raga: "bhimpalasi", description: "Raga Bhimpalasi — deeply moving and soulful. Lifts the veil of heaviness and nurtures emotional resilience. Paired with 12Hz Alpha waves." },
     culturalElement: { type: "Shloka", original: "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन", translation: "You have the right to perform your duty, but you are not entitled to the fruits of your actions.", context: "From the Bhagavad Gita (2.47), this is chosen because when motivation fades, it's often because we're fixated on results. Krishna's timeless advice frees you to simply act — and let the universe handle the rest." }
   },
 
@@ -101,7 +101,7 @@ const MOCKS = {
       { label: "Steady", text: "Place your hand on your heart. Feel it slowing. You haven't lost your fire — you've learned to carry it without getting burned. Take one final deep breath. Open your eyes. You are powerful, and now you are also clear. That combination is unstoppable. Namaste.", durationSec: 45 }
     ]},
     atmosphere: { name: "Ember to Teal", gradient: "linear-gradient(160deg, #7f1d1d 0%, #1e3a5f 50%, #0d9488 100%)", animation: "wave" },
-    soundProfile: { frequency: 10, wave: "Alpha", description: "10Hz Alpha waves help transition from the heightened beta state of anger into calm alertness, maintaining your energy while releasing the reactivity." },
+    soundProfile: { frequency: 10, wave: "Alpha", raga: "punnagavarali", description: "Raga Punnagavarali — serpentine, controlled, calming melodic flows. Cools the Pitta (fire) energy and reduces physical tension. Paired with 10Hz Alpha waves." },
     culturalElement: { type: "Shloka", original: "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन। मा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥", translation: "You have the right to act, but never to the fruit of action. Let not the fruit be your motive, nor let your attachment be to inaction.", context: "From the Bhagavad Gita — spoken on a battlefield to a warrior consumed by emotion. Krishna doesn't say 'don't feel.' He says: feel it, then act with clarity. Your anger is valid. Your response can be wise." }
   },
 
@@ -114,7 +114,7 @@ const MOCKS = {
       { label: "Step Forward", text: "Open your eyes slowly. The fear may still whisper — let it. You don't need it to be silent. You just need your courage to be louder. Take one step today toward the thing that scares you. Just one. That single step will echo louder than a thousand fears. Namaste.", durationSec: 45 }
     ]},
     atmosphere: { name: "Earth to Gold", gradient: "linear-gradient(160deg, #1c1917 0%, #78350f 50%, #fbbf24 100%)", animation: "gentle" },
-    soundProfile: { frequency: 8, wave: "Alpha", description: "8Hz Alpha waves activate the brain's courage and calm centers simultaneously, helping you face fear from a grounded state rather than a reactive one." },
+    soundProfile: { frequency: 8, wave: "Alpha", raga: "ahirbhairav", description: "Raga Ahir Bhairav — compassionate, devotional dawn vibes. Creates a sense of universal connection and self-compassion. Paired with 8Hz Alpha waves." },
     culturalElement: { type: "Mantra", original: "ॐ दुं दुर्गायै नमः", translation: "Om Dum Durgayei Namaha — I bow to the goddess Durga, the invincible one who destroys all fear.", context: "This mantra invokes Durga's fierce compassion. It's chosen because fear often makes us forget our own power. Durga doesn't eliminate danger — she reminds you that you were never as helpless as fear made you believe." }
   }
 }
