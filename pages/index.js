@@ -140,6 +140,9 @@ export default function Home() {
       </div>
 
       <p className="note" style={{ marginTop: 20, textAlign: 'center' }}>You can update these later from the Dashboard.</p>
+      <p className="note" style={{ marginTop: 12, textAlign: 'center' }}>
+        Or try our <a href="/meditate" style={{ color: 'var(--accent)' }}>🧘 Reactive Meditation</a> experience.
+      </p>
     </main>
   )
 }
