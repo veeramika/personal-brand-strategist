@@ -141,11 +141,11 @@ function detectMood(text) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { mood } = req.body || {}
+  const { mood, tier } = req.body || {}
   if (!mood?.trim()) return res.status(400).json({ error: 'mood is required' })
 
-  // With API key: use the rich therapeutic prompt
-  if (process.env.OPENAI_API_KEY) {
+  // Premium users get AI-generated unique sessions
+  if (tier === 'premium' && process.env.OPENAI_API_KEY) {
     try {
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -162,13 +162,13 @@ export default async function handler(req, res) {
       })
       const body = await r.json()
       const raw = body?.choices?.[0]?.message?.content || ''
-      return res.status(200).json(JSON.parse(raw))
+      return res.status(200).json({ ...JSON.parse(raw), tier: 'premium' })
     } catch (err) {
       console.error('AI error, falling back to mock:', err.message)
     }
   }
 
-  // Without API key (or on error): use mood-aware mocks
+  // Free users (or AI fallback): mood-aware cached sessions
   const detected = detectMood(mood)
-  return res.status(200).json(MOCKS[detected] || MOCKS.anxiety)
+  return res.status(200).json({ ...(MOCKS[detected] || MOCKS.anxiety), tier: 'free' })
 }

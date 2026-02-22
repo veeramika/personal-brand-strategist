@@ -1,13 +1,14 @@
 // POST /api/tts  { text: string }
-// Priority: Cache → ElevenLabs → OpenAI TTS HD → 404
-// Audio is cached in-memory by text hash — same text never calls the API twice
+// Priority: R2 cache → ElevenLabs → OpenAI → 404
+// Generated audio is stored in Cloudflare R2 permanently
 
 import crypto from 'crypto'
-
-// In-memory cache (persists across requests in the same serverless instance)
-const cache = new Map()
+import * as r2 from '../../lib/r2'
 
 function hash(text) { return crypto.createHash('md5').update(text).digest('hex') }
+
+// In-memory fallback cache (when R2 not configured)
+const memCache = new Map()
 
 async function elevenLabs(text) {
   const key = process.env.ELEVENLABS_API_KEY
@@ -20,7 +21,7 @@ async function elevenLabs(text) {
       voice_settings: { stability: 0.7, similarity_boost: 0.75, style: 0.4, use_speaker_boost: true }
     })
   })
-  if (!r.ok) { console.error('ElevenLabs:', r.status); return null }
+  if (!r.ok) return null
   return Buffer.from(await r.arrayBuffer())
 }
 
@@ -32,7 +33,7 @@ async function openaiTTS(text) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: 'tts-1-hd', voice: 'alloy', input: text, speed: 0.75 })
   })
-  if (!r.ok) { console.error('OpenAI TTS:', r.status); return null }
+  if (!r.ok) return null
   return Buffer.from(await r.arrayBuffer())
 }
 
@@ -42,26 +43,34 @@ export default async function handler(req, res) {
   if (!text?.trim()) return res.status(400).json({ error: 'text required' })
 
   const processed = text.replace(/\. /g, '. ... ').replace(/— /g, '... ').replace(/\? /g, '? ... ')
-  const key = hash(processed)
+  const key = hash(processed) + '.mp3'
 
-  // Return cached audio instantly
-  if (cache.has(key)) {
-    res.setHeader('Content-Type', 'audio/mpeg')
-    res.setHeader('X-TTS-Cache', 'hit')
-    return res.send(cache.get(key))
+  // 1. Check R2
+  const r2Url = await r2.getAudioUrl(key)
+  if (r2Url && await r2.exists(key)) {
+    return res.redirect(302, r2Url)
   }
 
+  // 2. Check memory cache
+  if (memCache.has(key)) {
+    res.setHeader('Content-Type', 'audio/mpeg')
+    return res.send(memCache.get(key))
+  }
+
+  // 3. Generate
   try {
     const audio = await elevenLabs(processed) || await openaiTTS(processed)
-    if (audio) {
-      cache.set(key, audio)
-      // Cap cache at 200 entries (~200MB max) to prevent memory issues
-      if (cache.size > 200) { const first = cache.keys().next().value; cache.delete(first) }
-      res.setHeader('Content-Type', 'audio/mpeg')
-      res.setHeader('X-TTS-Cache', 'miss')
-      return res.send(audio)
-    }
-    return res.status(404).json({ error: 'no tts available' })
+    if (!audio) return res.status(404).json({ error: 'no tts available' })
+
+    // Store in R2 (async, don't block response)
+    r2.upload(key, audio).catch(() => {})
+
+    // Store in memory cache as fallback
+    memCache.set(key, audio)
+    if (memCache.size > 200) { memCache.delete(memCache.keys().next().value) }
+
+    res.setHeader('Content-Type', 'audio/mpeg')
+    return res.send(audio)
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }

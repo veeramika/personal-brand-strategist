@@ -260,7 +260,10 @@ function SessionPlayer({ session, onReset }) {
 
       <div className="vv-session-inner">
         {/* Step counter */}
-        <p className="vv-step-counter">{stepIdx + 1} / {totalSteps}</p>
+        <p className="vv-step-counter">
+          {session.tier === 'premium' && <span className="vv-tier-badge">✦ Premium</span>}
+          {stepIdx + 1} / {totalSteps}
+        </p>
 
         {/* Breathing orb = play/pause */}
         <div className="vv-orb-wrap">
@@ -312,13 +315,23 @@ export default function Meditate() {
   const handleSpeech = useCallback((text) => setMood(prev => prev ? prev + ' ' + text : text), [])
   const speech = useSpeechToText(handleSpeech)
   const { user, signIn, signOut } = useAuth()
+  const [tier, setTier] = useState('free')
+
+  // Fetch user tier on login
+  useEffect(() => {
+    if (!user) { setTier('free'); return }
+    fetch(`/api/user-tier?userId=${user.id}`).then(r => r.json()).then(d => setTier(d.tier)).catch(() => {})
+  }, [user])
 
   async function submit(e) {
     e.preventDefault()
     if (!mood.trim()) return
     setPhase(PHASE_LOADING)
     try {
-      const r = await fetch('/api/meditate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mood }) })
+      const r = await fetch('/api/meditate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mood, tier })
+      })
       const data = await r.json()
       await new Promise(res => setTimeout(res, 5000))
       setSession(data); setPhase(PHASE_SESSION)
@@ -668,6 +681,7 @@ const globalStyles = `
 
   /* Step counter */
   .vv-step-counter { text-align:center; font-size:12px; color:rgba(255,255,255,0.3); letter-spacing:2px; margin-bottom:8px; }
+  .vv-tier-badge { display:inline-block; background:linear-gradient(135deg,#d4a574,#c4956a); color:#0a1a0a; font-size:10px; font-weight:600; padding:2px 8px; border-radius:10px; margin-right:8px; letter-spacing:1px; }
 
   /* Nav row */
   .vv-nav-row { display:flex; justify-content:center; gap:12px; margin-bottom:20px; }
