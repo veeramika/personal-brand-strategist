@@ -14,11 +14,14 @@ function Particles({ playing }) {
     let raf, particles = []
     const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight }
     resize(); window.addEventListener('resize', resize)
-    for (let i = 0; i < 60; i++) particles.push({
-      x: Math.random() * c.width, y: Math.random() * c.height,
-      r: Math.random() * 2.5 + 0.5, vx: (Math.random() - 0.5) * 0.3, vy: -Math.random() * 0.4 - 0.1,
-      o: Math.random() * 0.5 + 0.2
-    })
+    for (let i = 0; i < 80; i++) {
+      const colors = ['212,185,120', '100,180,160', '80,160,140', '200,170,100', '160,200,180', '220,200,150']
+      particles.push({
+        x: Math.random() * c.width, y: Math.random() * c.height,
+        r: Math.random() * 2.5 + 0.5, vx: (Math.random() - 0.5) * 0.25, vy: -Math.random() * 0.3 - 0.05,
+        o: Math.random() * 0.4 + 0.1, color: colors[Math.floor(Math.random() * colors.length)]
+      })
+    }
     function draw() {
       ctx.clearRect(0, 0, c.width, c.height)
       const speed = playing ? 1.5 : 0.5
@@ -27,7 +30,7 @@ function Particles({ playing }) {
         if (p.y < -10) { p.y = c.height + 10; p.x = Math.random() * c.width }
         if (p.x < -10) p.x = c.width + 10; if (p.x > c.width + 10) p.x = -10
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(212,175,130,${p.o})`; ctx.fill()
+        ctx.fillStyle = `rgba(${p.color},${p.o})`; ctx.fill()
       })
       raf = requestAnimationFrame(draw)
     }
@@ -73,13 +76,19 @@ function useSpeechToText(onResult) {
   return { listening, toggle, supported }
 }
 
-/* ─── Breathing Orb Loader ─── */
-function BreathingLoader() {
+/* ─── Breathing Orb Loader (mood-aware) ─── */
+function BreathingLoader({ mood }) {
+  const t = (mood || '').toLowerCase()
+  const isPositive = /happy|excited|great|amazing|good|grateful|blessed|joy|love|wonderful/i.test(t)
+  const msg = isPositive
+    ? "What a beautiful place to be… Let's deepen this feeling together."
+    : "Thank you for sharing that… Take a slow, deep breath in as we prepare your space."
   return (
     <div className="vv-loader">
+      <div className="vv-loader-lotus">✿</div>
       <div className="vv-orb vv-orb-breathe" />
-      <p className="vv-loader-text">Crafting your experience…</p>
-      <p className="vv-loader-hint">Breathe with the orb</p>
+      <p className="vv-loader-text">{msg}</p>
+      <p className="vv-loader-hint">Breathe gently with the light…</p>
     </div>
   )
 }
@@ -305,7 +314,7 @@ export default function Meditate() {
       <Head><link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" /></Head>
       <Particles playing={false} />
       <div className="vv-mesh vv-mesh-1" /><div className="vv-mesh vv-mesh-2" />
-      <BreathingLoader />
+      <BreathingLoader mood={mood} />
       <style jsx global>{globalStyles}</style>
     </main>
   )
@@ -323,24 +332,29 @@ export default function Meditate() {
       <Head><link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" /></Head>
       <Particles playing={false} />
 
-      {/* Water / lotus background layers */}
+      {/* Peacock feather shimmer blobs */}
+      <div className="vv-feather vv-feather-1" />
+      <div className="vv-feather vv-feather-2" />
+      <div className="vv-feather vv-feather-3" />
+
+      {/* Water + lotus layer */}
       <div className="vv-water" />
       <div className="vv-lotus vv-lotus-1">❁</div>
       <div className="vv-lotus vv-lotus-2">✿</div>
       <div className="vv-lotus vv-lotus-3">❁</div>
+      <div className="vv-swan">𓅃</div>
       <div className="vv-mandala" />
 
       <div className="vv-input-center">
-        {/* Sanskrit Om */}
         <div className="vv-om">ॐ</div>
         <h1 className="vv-title">Veda Verse</h1>
         <p className="vv-sanskrit-line">तमसो मा ज्योतिर्गमय</p>
-        <p className="vv-subtitle">From darkness, lead me to light.<br/>Speak or type how your heart feels — we'll craft a meditation just for you.</p>
+        <p className="vv-subtitle">From darkness, lead me to light.<br/>Share what your heart holds — we'll weave a meditation from ancient wisdom, just for you.</p>
 
         <form onSubmit={submit} className="vv-form">
           <div className="vv-input-line">
             <input className="vv-mood-input" value={mood} onChange={e => setMood(e.target.value)}
-              placeholder="I'm feeling…" autoFocus />
+              placeholder="How is your heart feeling right now…" autoFocus />
             {speech.supported && (
               <button type="button" className={`vv-voice-btn ${speech.listening ? 'active' : ''}`}
                 onClick={speech.toggle} aria-label="Voice input">
@@ -353,7 +367,12 @@ export default function Meditate() {
           <button type="submit" className="vv-begin" disabled={!mood.trim()}>Begin Your Journey 🙏</button>
         </form>
 
-        <p className="vv-footer-mantra">Guided by Vedic wisdom · Ragas · Shlokas · Mantras</p>
+        <div className="vv-features">
+          <span>🪷 Vedic Shlokas</span>
+          <span>🎵 Raga Soundscapes</span>
+          <span>🦚 Adaptive Visuals</span>
+          <span>🕊 Guided Voice</span>
+        </div>
       </div>
       <style jsx global>{globalStyles}</style>
     </main>
@@ -377,9 +396,9 @@ const globalStyles = `
     position:fixed; border-radius:50%; filter:blur(100px); opacity:0.35; pointer-events:none;
     animation: meshDrift 20s ease-in-out infinite alternate;
   }
-  .vv-mesh-1 { width:600px; height:600px; top:-200px; left:-150px; background:radial-gradient(circle,#4c1d95,#1e1b4b,transparent); }
-  .vv-mesh-2 { width:500px; height:500px; bottom:-150px; right:-100px; background:radial-gradient(circle,#312e81,#0f172a,transparent); animation-delay:-7s; }
-  .vv-mesh-3 { width:400px; height:400px; top:30%; left:50%; background:radial-gradient(circle,#5b21b6,transparent); animation-delay:-13s; }
+  .vv-mesh-1 { width:600px; height:600px; top:-200px; left:-150px; background:radial-gradient(circle,rgba(0,100,80,0.4),rgba(10,50,40,0.2),transparent); }
+  .vv-mesh-2 { width:500px; height:500px; bottom:-150px; right:-100px; background:radial-gradient(circle,rgba(0,80,100,0.3),rgba(10,40,50,0.15),transparent); animation-delay:-7s; }
+  .vv-mesh-3 { width:400px; height:400px; top:30%; left:50%; background:radial-gradient(circle,rgba(80,120,40,0.25),transparent); animation-delay:-13s; }
   @keyframes meshDrift {
     0% { transform:translate(0,0) scale(1); }
     100% { transform:translate(40px,30px) scale(1.15); }
@@ -388,7 +407,7 @@ const globalStyles = `
   /* ── Ripple ── */
   .vv-ripple {
     position:fixed; width:0; height:0; border-radius:50%; pointer-events:none; z-index:50;
-    background:radial-gradient(circle,rgba(167,139,250,0.3),transparent 70%);
+    background:radial-gradient(circle,rgba(140,180,100,0.3),transparent 70%);
     animation: rippleOut 0.8s ease-out forwards;
     transform:translate(-50%,-50%);
   }
@@ -406,122 +425,143 @@ const globalStyles = `
   /* ── Breathing Orb ── */
   .vv-orb {
     width:100px; height:100px; border-radius:50%; border:none; cursor:pointer;
-    background:radial-gradient(circle at 40% 40%, rgba(167,139,250,0.6), rgba(99,60,200,0.3), transparent);
-    box-shadow:0 0 60px rgba(139,92,246,0.3), 0 0 120px rgba(139,92,246,0.1);
+    background:radial-gradient(circle at 40% 40%, rgba(140,180,100,0.5), rgba(80,130,60,0.3), transparent);
+    box-shadow:0 0 50px rgba(120,160,80,0.25), 0 0 100px rgba(120,160,80,0.1);
     display:flex; align-items:center; justify-content:center;
     transition:transform 0.3s, box-shadow 0.3s;
   }
   .vv-orb-idle { width:80px; height:80px; animation:orbPulseIdle 4s ease-in-out infinite; cursor:default; }
   .vv-orb-breathe { animation:orbBreathe 5s ease-in-out infinite; }
-  .vv-orb-icon { font-size:28px; color:#fff; filter:drop-shadow(0 0 8px rgba(255,255,255,0.5)); }
+  .vv-orb-icon { font-size:28px; color:#e0e8d0; filter:drop-shadow(0 0 8px rgba(200,220,180,0.5)); }
   .vv-orb-wrap { display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:28px; }
-  .vv-orb-hint { font-size:12px; color:rgba(167,139,250,0.6); }
+  .vv-orb-hint { font-size:12px; color:rgba(160,200,130,0.5); }
   @keyframes orbBreathe {
-    0%,100% { transform:scale(0.85); box-shadow:0 0 40px rgba(139,92,246,0.2); }
-    50% { transform:scale(1.15); box-shadow:0 0 80px rgba(139,92,246,0.5), 0 0 160px rgba(139,92,246,0.15); }
+    0%,100% { transform:scale(0.85); box-shadow:0 0 40px rgba(120,160,80,0.2); }
+    50% { transform:scale(1.15); box-shadow:0 0 70px rgba(120,160,80,0.4), 0 0 140px rgba(120,160,80,0.1); }
   }
   @keyframes orbPulseIdle {
     0%,100% { transform:scale(0.95); opacity:0.7; }
     50% { transform:scale(1.05); opacity:1; }
   }
 
-  /* ── Loader ── */
-  .vv-loader { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:24px; }
-  .vv-loader-text { font-size:18px; font-weight:500; color:#e2e8f0; }
-  .vv-loader-hint { font-size:13px; color:#7a8599; }
-
-  /* ── Input Page — Indian Folk Cultural ── */
+  /* ── Landing — Peacock / Lotus / Swan ── */
   .vv-landing {
-    background:linear-gradient(180deg, #0a0a1a 0%, #0d1a2a 30%, #1a2a3a 60%, #0a1520 100%);
+    background:linear-gradient(170deg, #04120a 0%, #0a1f15 25%, #0d2818 50%, #081a12 75%, #040e08 100%);
   }
 
-  /* Water reflection at bottom */
+  /* Peacock feather shimmer blobs */
+  .vv-feather {
+    position:fixed; border-radius:50%; filter:blur(80px); pointer-events:none; z-index:0;
+    animation:featherDrift 18s ease-in-out infinite alternate;
+  }
+  .vv-feather-1 { width:500px; height:500px; top:-100px; right:-100px; background:radial-gradient(circle, rgba(0,120,100,0.25), rgba(0,80,120,0.15), transparent); }
+  .vv-feather-2 { width:400px; height:400px; bottom:10%; left:-80px; background:radial-gradient(circle, rgba(30,100,60,0.2), rgba(180,150,80,0.1), transparent); animation-delay:-6s; }
+  .vv-feather-3 { width:350px; height:350px; top:40%; left:60%; background:radial-gradient(circle, rgba(0,90,130,0.15), rgba(100,160,80,0.1), transparent); animation-delay:-12s; }
+  @keyframes featherDrift { 0%{transform:translate(0,0) scale(1)} 100%{transform:translate(30px,20px) scale(1.1)} }
+
+  /* Water */
   .vv-water {
-    position:fixed; bottom:0; left:0; right:0; height:35vh; z-index:0; pointer-events:none;
-    background:linear-gradient(180deg, transparent 0%, rgba(20,80,100,0.15) 40%, rgba(30,100,120,0.2) 100%);
+    position:fixed; bottom:0; left:0; right:0; height:30vh; z-index:0; pointer-events:none;
+    background:linear-gradient(180deg, transparent 0%, rgba(10,60,50,0.2) 50%, rgba(15,70,60,0.25) 100%);
     mask-image:linear-gradient(180deg, transparent 0%, black 100%);
     -webkit-mask-image:linear-gradient(180deg, transparent 0%, black 100%);
   }
 
-  /* Floating lotus flowers */
+  /* Lotuses — pink/white on water */
   .vv-lotus {
-    position:fixed; z-index:0; pointer-events:none;
-    font-size:48px; opacity:0.15;
-    animation:lotusFloat 12s ease-in-out infinite;
-    filter:drop-shadow(0 0 20px rgba(200,150,100,0.3));
+    position:fixed; z-index:1; pointer-events:none;
+    animation:lotusFloat 14s ease-in-out infinite;
   }
-  .vv-lotus-1 { bottom:8vh; left:8%; animation-delay:0s; font-size:56px; opacity:0.2; color:#d4a574; }
-  .vv-lotus-2 { bottom:12vh; right:12%; animation-delay:-4s; font-size:40px; color:#e8c9a0; }
-  .vv-lotus-3 { bottom:5vh; left:45%; animation-delay:-8s; font-size:36px; color:#c4956a; }
+  .vv-lotus-1 { bottom:6vh; left:6%; font-size:52px; opacity:0.3; color:#e8a0b0; filter:drop-shadow(0 0 15px rgba(220,140,160,0.3)); }
+  .vv-lotus-2 { bottom:10vh; right:10%; font-size:38px; opacity:0.25; color:#f0d0d8; animation-delay:-5s; filter:drop-shadow(0 0 12px rgba(240,200,210,0.2)); }
+  .vv-lotus-3 { bottom:3vh; left:40%; font-size:44px; opacity:0.2; color:#d4a0b0; animation-delay:-9s; filter:drop-shadow(0 0 15px rgba(200,140,160,0.25)); }
   @keyframes lotusFloat {
     0%,100% { transform:translateY(0) rotate(0deg); }
-    25% { transform:translateY(-8px) rotate(2deg); }
-    75% { transform:translateY(4px) rotate(-1deg); }
+    30% { transform:translateY(-6px) rotate(1.5deg); }
+    70% { transform:translateY(3px) rotate(-1deg); }
   }
 
-  /* Mandala background pattern */
+  /* Swan */
+  .vv-swan {
+    position:fixed; bottom:14vh; right:22%; font-size:32px; opacity:0.12; color:#f0e8d8;
+    z-index:1; pointer-events:none;
+    animation:swanGlide 20s ease-in-out infinite;
+    filter:drop-shadow(0 0 10px rgba(240,230,210,0.2));
+  }
+  @keyframes swanGlide {
+    0%,100% { transform:translateX(0) translateY(0); }
+    50% { transform:translateX(30px) translateY(-5px); }
+  }
+
+  /* Mandala — golden on dark green */
   .vv-mandala {
     position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
-    width:600px; height:600px; z-index:0; pointer-events:none; opacity:0.04;
+    width:650px; height:650px; z-index:0; pointer-events:none; opacity:0.035;
     border-radius:50%;
     background:
-      repeating-conic-gradient(from 0deg, transparent 0deg 10deg, rgba(200,160,100,0.3) 10deg 11deg),
-      repeating-conic-gradient(from 5deg, transparent 0deg 15deg, rgba(200,160,100,0.2) 15deg 16deg);
-    animation:mandalaSpin 120s linear infinite;
+      repeating-conic-gradient(from 0deg, transparent 0deg 10deg, rgba(200,170,80,0.3) 10deg 11deg),
+      repeating-conic-gradient(from 5deg, transparent 0deg 15deg, rgba(180,150,60,0.2) 15deg 16deg);
+    animation:mandalaSpin 150s linear infinite;
   }
   @keyframes mandalaSpin { to { transform:translate(-50%,-50%) rotate(360deg); } }
 
-  /* Om symbol */
+  /* Om — golden glow */
   .vv-om {
-    font-size:64px; color:rgba(212,165,116,0.6);
-    text-shadow:0 0 40px rgba(212,165,116,0.3), 0 0 80px rgba(212,165,116,0.1);
-    animation:omGlow 4s ease-in-out infinite;
-    margin-bottom:8px;
+    font-size:72px; color:rgba(210,180,100,0.7);
+    text-shadow:0 0 30px rgba(210,180,100,0.3), 0 0 60px rgba(210,180,100,0.15);
+    animation:omGlow 5s ease-in-out infinite; margin-bottom:6px;
   }
   @keyframes omGlow {
-    0%,100% { opacity:0.6; text-shadow:0 0 40px rgba(212,165,116,0.3); }
-    50% { opacity:1; text-shadow:0 0 60px rgba(212,165,116,0.5), 0 0 120px rgba(212,165,116,0.2); }
+    0%,100% { opacity:0.6; text-shadow:0 0 30px rgba(210,180,100,0.25); }
+    50% { opacity:1; text-shadow:0 0 50px rgba(210,180,100,0.5), 0 0 100px rgba(210,180,100,0.15); }
   }
 
-  /* Sanskrit decorative line */
   .vv-sanskrit-line {
-    font-family:'Lora',serif; font-size:18px; color:rgba(212,165,116,0.5);
-    letter-spacing:2px; margin-bottom:4px;
+    font-family:'Lora',serif; font-size:17px; color:rgba(210,180,100,0.45);
+    letter-spacing:3px; margin-bottom:4px;
   }
 
   .vv-input-center {
-    position:relative; z-index:1; display:flex; flex-direction:column; align-items:center;
+    position:relative; z-index:2; display:flex; flex-direction:column; align-items:center;
     justify-content:center; min-height:100vh; padding:24px; text-align:center;
   }
   .vv-title {
-    font-family:'Lora',serif; font-size:48px; font-weight:600; margin-top:4px;
-    background:linear-gradient(135deg, #f5e6d0 0%, #d4a574 40%, #c4956a 70%, #a07850 100%);
+    font-family:'Lora',serif; font-size:50px; font-weight:600; margin-top:2px;
+    background:linear-gradient(135deg, #f0e0c0 0%, #d4b070 35%, #c4a060 65%, #a08040 100%);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    letter-spacing:1px;
+    letter-spacing:2px;
   }
-  .vv-subtitle { color:rgba(200,190,175,0.6); font-size:15px; margin:12px 0 32px; max-width:400px; line-height:1.6; }
-  .vv-footer-mantra { margin-top:28px; font-size:11px; color:rgba(212,165,116,0.3); letter-spacing:1px; }
+  .vv-subtitle { color:rgba(180,200,180,0.55); font-size:14px; margin:14px 0 30px; max-width:400px; line-height:1.7; }
 
-  .vv-form { width:100%; max-width:420px; }
+  .vv-features {
+    display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-top:28px;
+  }
+  .vv-features span {
+    font-size:11px; color:rgba(180,200,170,0.4); padding:5px 12px;
+    border:1px solid rgba(180,200,170,0.1); border-radius:20px;
+    background:rgba(180,200,170,0.03);
+  }
+
+  .vv-form { width:100%; max-width:440px; }
   .vv-input-line { position:relative; }
   .vv-mood-input {
-    width:100%; padding:16px 56px 16px 20px; border-radius:50px;
-    border:1px solid rgba(212,165,116,0.15);
-    background:rgba(212,165,116,0.05); backdrop-filter:blur(12px);
-    color:#e8d5c0; font-size:16px; font-family:inherit; outline:none;
+    width:100%; padding:16px 56px 16px 22px; border-radius:50px;
+    border:1px solid rgba(100,160,120,0.2);
+    background:rgba(100,160,120,0.06); backdrop-filter:blur(16px);
+    color:#d0e0d0; font-size:16px; font-family:inherit; outline:none;
     transition:border-color 0.3s, box-shadow 0.3s;
   }
-  .vv-mood-input:focus { border-color:rgba(212,165,116,0.4); box-shadow:0 0 0 4px rgba(212,165,116,0.1); }
-  .vv-mood-input::placeholder { color:rgba(200,180,160,0.3); }
+  .vv-mood-input:focus { border-color:rgba(160,200,120,0.4); box-shadow:0 0 0 4px rgba(100,160,120,0.1); }
+  .vv-mood-input::placeholder { color:rgba(150,180,150,0.3); }
 
   .vv-voice-btn {
     position:absolute; right:8px; top:50%; transform:translateY(-50%);
     width:40px; height:40px; border-radius:50%; border:none;
-    background:rgba(212,165,116,0.15); color:#d4a574; font-size:20px;
+    background:rgba(160,200,120,0.12); color:rgba(180,210,140,0.7); font-size:20px;
     cursor:pointer; display:flex; align-items:center; justify-content:center;
     transition:all 0.3s; font-family:inherit;
   }
-  .vv-voice-btn:hover { background:rgba(212,165,116,0.25); }
+  .vv-voice-btn:hover { background:rgba(160,200,120,0.2); }
   .vv-voice-btn.active { background:rgba(239,68,68,0.3); color:#fff; }
   .vv-voice-btn.active .vv-voice-ring {
     position:absolute; inset:-4px; border-radius:50%;
@@ -534,16 +574,22 @@ const globalStyles = `
   .vv-listening-label { font-size:13px; color:#ef4444; margin-top:10px; text-align:center; }
 
   .vv-begin {
-    margin-top:20px; width:100%; padding:14px; border-radius:50px; border:none;
-    background:linear-gradient(135deg, #a07850, #c4956a, #d4a574); color:#1a1a2e;
+    margin-top:20px; width:100%; padding:15px; border-radius:50px; border:none;
+    background:linear-gradient(135deg, #6b8040, #8a9a50, #a0a860, #c4b470); color:#0a1a0a;
     font-size:16px; font-weight:600; cursor:pointer; font-family:'Lora',serif;
     transition:opacity 0.2s, transform 0.15s;
-    box-shadow:0 4px 24px rgba(212,165,116,0.25);
+    box-shadow:0 4px 20px rgba(140,160,80,0.2);
     letter-spacing:0.5px;
   }
-  .vv-begin:hover:not(:disabled) { opacity:0.9; }
+  .vv-begin:hover:not(:disabled) { opacity:0.9; box-shadow:0 6px 30px rgba(140,160,80,0.3); }
   .vv-begin:active:not(:disabled) { transform:scale(0.98); }
-  .vv-begin:disabled { opacity:0.3; cursor:not-allowed; }
+  .vv-begin:disabled { opacity:0.25; cursor:not-allowed; }
+
+  /* ── Loader ── */
+  .vv-loader { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:20px; }
+  .vv-loader-lotus { font-size:40px; opacity:0.4; color:#e8a0b0; animation:lotusFloat 8s ease-in-out infinite; filter:drop-shadow(0 0 15px rgba(220,140,160,0.3)); }
+  .vv-loader-text { font-family:'Lora',serif; font-size:17px; font-weight:400; color:rgba(210,220,200,0.8); max-width:360px; text-align:center; line-height:1.6; }
+  .vv-loader-hint { font-size:13px; color:rgba(160,180,150,0.4); }
 
   /* ── Session ── */
   .vv-session-inner { position:relative; z-index:1; max-width:640px; margin:0 auto; padding:48px 20px 64px; }
@@ -560,14 +606,14 @@ const globalStyles = `
   .vv-shloka-glow {
     position:absolute; top:50%; left:50%; width:200%; height:200%;
     transform:translate(-50%,-50%);
-    background:radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 60%);
+    background:radial-gradient(circle, rgba(180,160,80,0.08) 0%, transparent 60%);
     pointer-events:none;
   }
-  .vv-shloka-type { font-size:10px; text-transform:uppercase; letter-spacing:2px; color:rgba(167,139,250,0.5); margin-bottom:16px; position:relative; }
+  .vv-shloka-type { font-size:10px; text-transform:uppercase; letter-spacing:2px; color:rgba(200,170,80,0.5); margin-bottom:16px; position:relative; }
   .vv-shloka-original {
-    font-family:'Lora',serif; font-size:26px; font-weight:600; color:#fff;
+    font-family:'Lora',serif; font-size:26px; font-weight:600; color:#f0e8d0;
     line-height:1.6; margin-bottom:12px; position:relative;
-    text-shadow:0 0 30px rgba(139,92,246,0.2);
+    text-shadow:0 0 30px rgba(200,170,80,0.2);
   }
   .vv-shloka-translation {
     font-family:'Lora',serif; font-size:15px; font-style:italic;
@@ -577,7 +623,7 @@ const globalStyles = `
 
   /* Sound badge */
   .vv-sound-badge { display:flex; align-items:center; gap:14px; padding:16px 24px; }
-  .vv-sound-freq { font-size:13px; font-weight:600; color:#a78bfa; white-space:nowrap; }
+  .vv-sound-freq { font-size:13px; font-weight:600; color:rgba(180,200,120,0.7); white-space:nowrap; }
   .vv-sound-desc { font-size:12px; color:rgba(255,255,255,0.4); line-height:1.4; }
 
   /* Step counter */
@@ -596,7 +642,7 @@ const globalStyles = `
 
   /* Speaking indicator */
   .vv-speaking-dot {
-    width:8px; height:8px; border-radius:50%; background:#a78bfa; margin:12px auto 0;
+    width:8px; height:8px; border-radius:50%; background:rgba(160,200,120,0.7); margin:12px auto 0;
     animation:speakPulse 1.2s ease-in-out infinite;
   }
   @keyframes speakPulse { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.5)} }
