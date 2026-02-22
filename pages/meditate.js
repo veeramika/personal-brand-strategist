@@ -8,7 +8,7 @@ const PHASE_SESSION = 'session'
 function useBinauralBeat() {
   const ctxRef = useRef(null)
   const nodesRef = useRef(null)
-  const [status, setStatus] = useState('idle') // idle | playing | error
+  const [status, setStatus] = useState('idle')
 
   const start = useCallback((freq) => {
     try { nodesRef.current?.forEach(n => n.stop()) } catch {}
@@ -19,29 +19,28 @@ function useBinauralBeat() {
       if (!AC) { setStatus('error'); return }
 
       const ctx = new AC()
-      ctx.resume().then(() => {
-        // Simple approach: both oscillators → gain → destination
-        // The slight frequency difference creates the binaural beat
-        const gain = ctx.createGain()
-        gain.gain.value = 0.5
-        gain.connect(ctx.destination)
+      // Resume but don't wait — create nodes synchronously in user gesture
+      ctx.resume()
 
-        const oscL = ctx.createOscillator()
-        oscL.frequency.value = 150
-        oscL.type = 'sine'
-        oscL.connect(gain)
-        oscL.start()
+      const gain = ctx.createGain()
+      gain.gain.value = 0.5
+      gain.connect(ctx.destination)
 
-        const oscR = ctx.createOscillator()
-        oscR.frequency.value = 150 + freq
-        oscR.type = 'sine'
-        oscR.connect(gain)
-        oscR.start()
+      const oscL = ctx.createOscillator()
+      oscL.frequency.value = 150
+      oscL.type = 'sine'
+      oscL.connect(gain)
+      oscL.start()
 
-        ctxRef.current = ctx
-        nodesRef.current = [oscL, oscR]
-        setStatus('playing')
-      }).catch(e => { console.error('Resume failed:', e); setStatus('error') })
+      const oscR = ctx.createOscillator()
+      oscR.frequency.value = 150 + freq
+      oscR.type = 'sine'
+      oscR.connect(gain)
+      oscR.start()
+
+      ctxRef.current = ctx
+      nodesRef.current = [oscL, oscR]
+      setStatus('playing')
     } catch (e) {
       console.error('Audio error:', e)
       setStatus('error')
