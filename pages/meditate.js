@@ -1,16 +1,100 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-/* ─── Phases ─── */
 const PHASE_INPUT = 'input'
 const PHASE_LOADING = 'loading'
 const PHASE_SESSION = 'session'
+
+/* ─── Binaural Beat Engine (Web Audio API) ─── */
+function useBinauralBeat() {
+  const ctxRef = useRef(null)
+  const nodesRef = useRef(null)
+
+  const start = useCallback((freq) => {
+    stop()
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const gain = ctx.createGain()
+    gain.gain.value = 0.3
+    gain.connect(ctx.destination)
+
+    const baseFreq = 200
+    const oscL = ctx.createOscillator()
+    const oscR = ctx.createOscillator()
+    oscL.type = 'sine'
+    oscR.type = 'sine'
+    oscL.frequency.value = baseFreq
+    oscR.frequency.value = baseFreq + freq
+
+    // stereo panning for binaural effect
+    const panL = ctx.createStereoPanner()
+    const panR = ctx.createStereoPanner()
+    panL.pan.value = -1
+    panR.pan.value = 1
+
+    oscL.connect(panL).connect(gain)
+    oscR.connect(panR).connect(gain)
+    oscL.start()
+    oscR.start()
+
+    ctxRef.current = ctx
+    nodesRef.current = { oscL, oscR }
+  }, [])
+
+  const stop = useCallback(() => {
+    if (nodesRef.current) {
+      nodesRef.current.oscL.stop()
+      nodesRef.current.oscR.stop()
+      nodesRef.current = null
+    }
+    if (ctxRef.current) {
+      ctxRef.current.close()
+      ctxRef.current = null
+    }
+  }, [])
+
+  useEffect(() => () => stop(), [stop])
+  return { start, stop }
+}
+
+/* ─── Speech-to-Text Hook ─── */
+function useSpeechToText(onResult) {
+  const [listening, setListening] = useState(false)
+  const recRef = useRef(null)
+
+  const supported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+
+  const toggle = useCallback(() => {
+    if (!supported) return
+    if (listening) {
+      recRef.current?.stop()
+      setListening(false)
+      return
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    const rec = new SR()
+    rec.lang = 'en-US'
+    rec.interimResults = false
+    rec.continuous = false
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript
+      onResult(text)
+      setListening(false)
+    }
+    rec.onerror = () => setListening(false)
+    rec.onend = () => setListening(false)
+    rec.start()
+    recRef.current = rec
+    setListening(true)
+  }, [listening, supported, onResult])
+
+  return { listening, toggle, supported }
+}
 
 /* ─── Breathing Loader ─── */
 function BreathingLoader() {
   return (
     <div className="m-loader-wrap">
       <div className="m-breath-ring" />
-      <p className="m-loader-text">Crafting your experience…</p>
+      <p className="m-loader-text">Veda Verse is crafting your experience…</p>
       <p className="m-loader-sub">Breathe in… and out…</p>
       <style jsx>{`
         .m-loader-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:20px; }
@@ -36,23 +120,20 @@ function SessionPlayer({ session, onReset }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [audioOn, setAudioOn] = useState(false)
   const timerRef = useRef(null)
+  const binaural = useBinauralBeat()
 
   const steps = session.script.steps
   const current = steps[stepIdx]
   const totalDuration = current.durationSec
 
-  // Timer logic
   useEffect(() => {
     if (!playing) { clearInterval(timerRef.current); return }
     timerRef.current = setInterval(() => {
       setElapsed(e => {
         if (e + 1 >= totalDuration) {
-          // auto-advance
-          if (stepIdx < steps.length - 1) {
-            setStepIdx(i => i + 1)
-            return 0
-          }
+          if (stepIdx < steps.length - 1) { setStepIdx(i => i + 1); return 0 }
           setPlaying(false)
           return totalDuration
         }
@@ -61,6 +142,20 @@ function SessionPlayer({ session, onReset }) {
     }, 1000)
     return () => clearInterval(timerRef.current)
   }, [playing, stepIdx, totalDuration, steps.length])
+
+  // Start/stop binaural audio with play state
+  useEffect(() => {
+    if (playing && !audioOn) {
+      binaural.start(session.soundProfile.frequency)
+      setAudioOn(true)
+    } else if (!playing && audioOn) {
+      binaural.stop()
+      setAudioOn(false)
+    }
+  }, [playing, audioOn, binaural, session.soundProfile.frequency])
+
+  // Cleanup on unmount
+  useEffect(() => () => binaural.stop(), [binaural])
 
   const goStep = useCallback((i) => { setStepIdx(i); setElapsed(0) }, [])
   const toggle = () => setPlaying(p => !p)
@@ -71,10 +166,9 @@ function SessionPlayer({ session, onReset }) {
   return (
     <div className="m-session" style={{ background: atmosphere.gradient, minHeight: '100vh', transition: 'background 1.5s ease' }}>
       <div className="m-session-inner">
-        {/* Title */}
+        <p className="m-brand-tag">Veda Verse</p>
         <h1 className="m-title">{session.script.title}</h1>
 
-        {/* Step nav */}
         <div className="m-step-nav">
           {steps.map((s, i) => (
             <button key={i} onClick={() => goStep(i)}
@@ -84,7 +178,6 @@ function SessionPlayer({ session, onReset }) {
           ))}
         </div>
 
-        {/* Script card */}
         <div className="m-card m-script-card">
           <div className="m-step-label">{current.label}</div>
           <p className="m-script-text">{current.text}</p>
@@ -92,14 +185,18 @@ function SessionPlayer({ session, onReset }) {
           <div className="m-timer">{elapsed}s / {totalDuration}s</div>
         </div>
 
-        {/* Controls */}
         <div className="m-controls">
           <button className="m-ctrl-btn" onClick={() => goStep(Math.max(0, stepIdx - 1))}>⏮</button>
-          <button className="m-ctrl-btn m-play-btn" onClick={toggle}>{playing ? '⏸' : '▶'}</button>
+          <button className="m-ctrl-btn m-play-btn" onClick={toggle}>
+            {playing ? '⏸' : '▶'}
+          </button>
           <button className="m-ctrl-btn" onClick={() => goStep(Math.min(steps.length - 1, stepIdx + 1))}>⏭</button>
         </div>
 
-        {/* Cultural element */}
+        {audioOn && (
+          <p className="m-audio-indicator">🔊 {soundProfile.frequency}Hz {soundProfile.wave} binaural beat playing</p>
+        )}
+
         <div className="m-card m-culture-card">
           <div className="m-culture-type">{culturalElement.type}</div>
           <p className="m-culture-original">{culturalElement.original}</p>
@@ -107,18 +204,18 @@ function SessionPlayer({ session, onReset }) {
           <p className="m-culture-context">{culturalElement.context}</p>
         </div>
 
-        {/* Sound profile */}
         <div className="m-card m-sound-card">
           <span className="m-sound-freq">{soundProfile.frequency}Hz {soundProfile.wave}</span>
           <span className="m-sound-desc">{soundProfile.description}</span>
         </div>
 
-        <button className="m-reset-btn" onClick={onReset}>← New Session</button>
+        <button className="m-reset-btn" onClick={() => { binaural.stop(); onReset() }}>← New Session</button>
       </div>
 
       <style jsx>{`
         .m-session { padding:0; }
         .m-session-inner { max-width:680px; margin:0 auto; padding:48px 20px 64px; }
+        .m-brand-tag { text-align:center; font-size:12px; text-transform:uppercase; letter-spacing:2px; color:rgba(255,255,255,0.35); margin-bottom:8px; }
         .m-title { font-size:28px; font-weight:700; text-align:center; margin-bottom:28px; color:#fff; text-shadow:0 2px 20px rgba(0,0,0,0.4); }
 
         .m-step-nav { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:24px; }
@@ -139,7 +236,7 @@ function SessionPlayer({ session, onReset }) {
         .m-progress-fill { height:100%; background:linear-gradient(90deg,#8b5cf6,#a78bfa); border-radius:4px; transition:width 1s linear; }
         .m-timer { font-size:12px; color:rgba(255,255,255,0.4); margin-top:8px; text-align:right; }
 
-        .m-controls { display:flex; justify-content:center; gap:16px; margin-bottom:24px; }
+        .m-controls { display:flex; justify-content:center; gap:16px; margin-bottom:16px; }
         .m-ctrl-btn {
           width:48px; height:48px; border-radius:50%; border:1px solid rgba(255,255,255,0.15);
           background:rgba(255,255,255,0.08); color:#fff; font-size:18px; cursor:pointer;
@@ -147,6 +244,8 @@ function SessionPlayer({ session, onReset }) {
         }
         .m-ctrl-btn:hover { background:rgba(255,255,255,0.15); }
         .m-play-btn { width:56px; height:56px; font-size:22px; background:rgba(139,92,246,0.3); border-color:rgba(139,92,246,0.5); }
+
+        .m-audio-indicator { text-align:center; font-size:12px; color:rgba(167,139,250,0.7); margin-bottom:20px; }
 
         .m-culture-card { text-align:center; }
         .m-culture-type { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,0.4); margin-bottom:12px; }
@@ -161,8 +260,7 @@ function SessionPlayer({ session, onReset }) {
         .m-reset-btn {
           display:block; margin:24px auto 0; padding:10px 24px; border-radius:8px;
           border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06);
-          color:rgba(255,255,255,0.6); font-size:14px; cursor:pointer; font-family:inherit;
-          transition:all 0.2s;
+          color:rgba(255,255,255,0.6); font-size:14px; cursor:pointer; font-family:inherit; transition:all 0.2s;
         }
         .m-reset-btn:hover { background:rgba(255,255,255,0.1); color:#fff; }
 
@@ -182,6 +280,9 @@ export default function Meditate() {
   const [mood, setMood] = useState('')
   const [session, setSession] = useState(null)
 
+  const handleSpeech = useCallback((text) => setMood(prev => prev ? prev + ' ' + text : text), [])
+  const speech = useSpeechToText(handleSpeech)
+
   async function submit(e) {
     e.preventDefault()
     if (!mood.trim()) return
@@ -192,7 +293,6 @@ export default function Meditate() {
         body: JSON.stringify({ mood })
       })
       const data = await r.json()
-      // ensure minimum 5s loader for the breathing animation
       await new Promise(res => setTimeout(res, 5000))
       setSession(data)
       setPhase(PHASE_SESSION)
@@ -204,53 +304,70 @@ export default function Meditate() {
 
   function reset() { setPhase(PHASE_INPUT); setSession(null); setMood('') }
 
-  if (phase === PHASE_LOADING) return (
-    <main className="m-page"><BreathingLoader /></main>
-  )
-
-  if (phase === PHASE_SESSION && session) return (
-    <SessionPlayer session={session} onReset={reset} />
-  )
+  if (phase === PHASE_LOADING) return <main className="m-page"><BreathingLoader /></main>
+  if (phase === PHASE_SESSION && session) return <SessionPlayer session={session} onReset={reset} />
 
   return (
     <main className="m-page">
       <div className="m-input-wrap">
-        <div className="m-logo">🧘</div>
-        <h1 className="m-heading">Reactive Meditation</h1>
-        <p className="m-sub">An AI-crafted meditation experience, shaped by how you feel right now.</p>
+        <div className="m-logo">🙏</div>
+        <h1 className="m-heading">Veda Verse</h1>
+        <p className="m-sub">An AI-crafted meditation experience rooted in Vedic wisdom, shaped by how you feel right now.</p>
 
         <form onSubmit={submit} className="m-form">
           <label className="m-label" htmlFor="mood-input">How is your heart / mind feeling right now?</label>
-          <textarea
-            id="mood-input"
-            className="m-textarea"
-            rows={3}
-            value={mood}
-            onChange={e => setMood(e.target.value)}
-            placeholder="e.g. I'm feeling high-anxiety and can't stop overthinking…"
-          />
+          <div className="m-input-row">
+            <textarea
+              id="mood-input"
+              className="m-textarea"
+              rows={3}
+              value={mood}
+              onChange={e => setMood(e.target.value)}
+              placeholder="e.g. I'm feeling high-anxiety and can't stop overthinking…"
+            />
+            {speech.supported && (
+              <button type="button" className={`m-mic-btn ${speech.listening ? 'listening' : ''}`} onClick={speech.toggle} aria-label="Voice input">
+                {speech.listening ? '⏹' : '🎙'}
+              </button>
+            )}
+          </div>
+          {speech.listening && <p className="m-listening">Listening… speak now</p>}
           <button type="submit" className="m-submit" disabled={!mood.trim()}>Begin Session ✨</button>
         </form>
 
-        <p className="m-footer">Guided scripts · Vedic shlokas · Binaural sound profiles · Adaptive visuals</p>
+        <p className="m-footer">Guided scripts · Vedic shlokas · Binaural beats · Adaptive visuals</p>
       </div>
 
       <style jsx>{`
         .m-page { min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(160deg,#0a0e1a 0%,#1a1040 50%,#0f172a 100%); padding:24px; }
         .m-input-wrap { max-width:520px; width:100%; text-align:center; }
         .m-logo { font-size:48px; margin-bottom:16px; }
-        .m-heading { font-size:32px; font-weight:700; background:linear-gradient(135deg,#fff,#c4b5fd); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; }
+        .m-heading { font-size:36px; font-weight:700; background:linear-gradient(135deg,#fff,#c4b5fd); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; letter-spacing:-0.5px; }
         .m-sub { color:#7a8599; font-size:15px; margin-bottom:36px; line-height:1.5; }
 
         .m-form { text-align:left; }
         .m-label { display:block; font-size:14px; font-weight:500; color:#a78bfa; margin-bottom:10px; }
+
+        .m-input-row { position:relative; }
         .m-textarea {
-          width:100%; padding:14px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);
+          width:100%; padding:14px 52px 14px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1);
           background:rgba(255,255,255,0.04); color:#e2e8f0; font-size:15px; font-family:inherit;
           resize:vertical; outline:none; transition:border-color 0.2s, box-shadow 0.2s; line-height:1.5;
         }
         .m-textarea:focus { border-color:#8b5cf6; box-shadow:0 0 0 3px rgba(139,92,246,0.25); }
         .m-textarea::placeholder { color:#4a5568; }
+
+        .m-mic-btn {
+          position:absolute; right:10px; top:10px; width:36px; height:36px; border-radius:50%;
+          border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06);
+          color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+          transition:all 0.2s; font-family:inherit;
+        }
+        .m-mic-btn:hover { background:rgba(255,255,255,0.12); }
+        .m-mic-btn.listening { background:rgba(239,68,68,0.3); border-color:rgba(239,68,68,0.5); animation:mic-pulse 1.5s ease-in-out infinite; }
+        @keyframes mic-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.3)} 50%{box-shadow:0 0 0 8px rgba(239,68,68,0)} }
+
+        .m-listening { font-size:13px; color:#ef4444; margin-top:8px; animation:mic-pulse 1.5s ease-in-out infinite; }
 
         .m-submit {
           margin-top:16px; width:100%; padding:14px; border-radius:10px; border:none;
@@ -262,8 +379,6 @@ export default function Meditate() {
         .m-submit:disabled { opacity:0.4; cursor:not-allowed; }
 
         .m-footer { margin-top:28px; font-size:12px; color:#4a5568; }
-
-        .m-loader-wrap { min-height:100vh; }
       `}</style>
     </main>
   )
