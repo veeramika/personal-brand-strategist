@@ -89,7 +89,7 @@ function SessionPlayer({ session, onReset }) {
   // Build unified steps: script steps + shloka as final step
   const allSteps = [
     ...session.script.steps,
-    { label: session.culturalElement.type, text: `${session.culturalElement.original}. ${session.culturalElement.translation}. ${session.culturalElement.context}`, isShloka: true }
+    { label: session.culturalElement.type, text: `${session.culturalElement.translation}. ${session.culturalElement.context}`, isShloka: true }
   ]
   const totalSteps = allSteps.length
 
@@ -121,11 +121,10 @@ function SessionPlayer({ session, onReset }) {
   // Auto-advance when speech ends
   function onSpeechEnd() {
     setSpeaking(false)
-    // Brief pause after speech, then auto-advance
     timerRef.current = setTimeout(() => {
-      if (isLast) { setPlaying(false) }
+      if (isLast) { stopAudio(); setPlaying(false) }
       else { setStepIdx(i => i + 1) }
-    }, 2000) // 2s silence between steps
+    }, 2000)
   }
 
   // Voice narration — speech-driven (no fixed timer)
@@ -154,7 +153,7 @@ function SessionPlayer({ session, onReset }) {
     }).catch(() => {
       if (cancelled) return
       const u = new SpeechSynthesisUtterance(current.text)
-      u.rate = 0.65; u.pitch = 0.8; u.volume = 0.9
+      u.rate = 0.55; u.pitch = 0.9; u.volume = 0.85
       const voices = window.speechSynthesis?.getVoices() || []
       const calm = voices.find(v => /samantha|karen|daniel|google uk/i.test(v.name)) || voices.find(v => v.lang.startsWith('en'))
       if (calm) u.voice = calm
