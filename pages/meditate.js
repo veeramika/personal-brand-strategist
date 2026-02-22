@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Head from 'next/head'
+import { useAuth } from '../lib/auth'
 
 const PHASE_INPUT = 'input'
 const PHASE_LOADING = 'loading'
@@ -310,6 +311,7 @@ export default function Meditate() {
   const [session, setSession] = useState(null)
   const handleSpeech = useCallback((text) => setMood(prev => prev ? prev + ' ' + text : text), [])
   const speech = useSpeechToText(handleSpeech)
+  const { user, signIn, signOut } = useAuth()
 
   async function submit(e) {
     e.preventDefault()
@@ -361,6 +363,18 @@ export default function Meditate() {
       <div className="vv-mandala" />
 
       <div className="vv-input-center">
+        {/* Auth corner */}
+        <div className="vv-auth">
+          {user ? (
+            <button className="vv-auth-btn" onClick={signOut}>
+              <img src={user.user_metadata?.avatar_url} alt="" className="vv-avatar" />
+              {user.user_metadata?.full_name?.split(' ')[0]}
+            </button>
+          ) : (
+            <button className="vv-auth-btn" onClick={signIn}>Sign in with Google</button>
+          )}
+        </div>
+
         <div className="vv-om">ॐ</div>
         <h1 className="vv-title">Veda Verse</h1>
         <p className="vv-sanskrit-line">तमसो मा ज्योतिर्गमय</p>
@@ -547,6 +561,17 @@ const globalStyles = `
     letter-spacing:2px;
   }
   .vv-subtitle { color:rgba(180,200,180,0.55); font-size:14px; margin:14px 0 30px; max-width:400px; line-height:1.7; }
+
+  /* Auth */
+  .vv-auth { position:absolute; top:20px; right:20px; z-index:10; }
+  .vv-auth-btn {
+    display:flex; align-items:center; gap:8px; padding:6px 14px; border-radius:50px;
+    border:1px solid rgba(180,200,170,0.15); background:rgba(180,200,170,0.06);
+    color:rgba(200,220,190,0.6); font-size:12px; cursor:pointer; font-family:inherit;
+    backdrop-filter:blur(8px); transition:all 0.2s;
+  }
+  .vv-auth-btn:hover { border-color:rgba(180,200,170,0.3); color:rgba(220,240,210,0.8); }
+  .vv-avatar { width:22px; height:22px; border-radius:50%; }
 
   .vv-features {
     display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-top:28px;
