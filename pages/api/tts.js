@@ -18,7 +18,7 @@ async function elevenLabs(text) {
   if (!r.ok) {
     const err = await r.text().catch(() => r.status)
     console.error('TTS: ElevenLabs failed:', r.status, err)
-    return null
+    return { error: `elevenlabs ${r.status}: ${err}` }
   }
   console.log('TTS: ElevenLabs success')
   return Buffer.from(await r.arrayBuffer())
@@ -36,7 +36,7 @@ async function openaiTTS(text) {
   if (!r.ok) {
     const err = await r.text().catch(() => r.status)
     console.error('TTS: OpenAI failed:', r.status, err)
-    return null
+    return { error: `openai ${r.status}: ${err}` }
   }
   console.log('TTS: OpenAI success')
   return Buffer.from(await r.arrayBuffer())
@@ -49,15 +49,19 @@ export default async function handler(req, res) {
 
   const processed = text.replace(/\. /g, '. ... ').replace(/— /g, '... ').replace(/\? /g, '? ... ')
 
+  let errors = []
   try {
-    const audio = await elevenLabs(processed) || await openaiTTS(processed)
-    if (audio) {
-      res.setHeader('Content-Type', 'audio/mpeg')
-      return res.send(audio)
-    }
-    return res.status(404).json({ error: 'no tts available' })
+    let result = await elevenLabs(processed)
+    if (Buffer.isBuffer(result)) { res.setHeader('Content-Type', 'audio/mpeg'); return res.send(result) }
+    if (result?.error) errors.push(result.error)
+
+    result = await openaiTTS(processed)
+    if (Buffer.isBuffer(result)) { res.setHeader('Content-Type', 'audio/mpeg'); return res.send(result) }
+    if (result?.error) errors.push(result.error)
+
+    return res.status(404).json({ error: 'no tts available', debug: errors })
   } catch (err) {
     console.error('TTS error:', err.message)
-    return res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: err.message, debug: errors })
   }
 }
