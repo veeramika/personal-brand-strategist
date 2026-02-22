@@ -123,18 +123,20 @@ const MOCKS = {
 function detectMood(text) {
   const t = text.toLowerCase()
   const map = [
-    [/anxi|panic|overwhelm|stress|racing|tight|nervous|restless|cant stop think|overthink|worried|tension/i, 'anxiety'],
-    [/sad|lonely|alone|grief|miss |crying|tears|empty|hollow|lost someone|heartbr|reject|broke.*heart/i, 'sadness'],
-    [/happy|excited|great|amazing|wonderful|grateful|thankful|blessed|joy|fantastic|good mood|feeling good|positive|cheerful|elated/i, 'happy'],
-    [/unmotivat|stuck|lazy|procrastinat|no energy|tired|exhausted|can.t start|don.t feel like|lost direction|purposeless|demotivat|low energy|drained/i, 'unmotivated'],
+    [/anxi|panic|overwhelm|stress|racing|tight|nervous|restless|cant stop think|overthink|worried|tension|freaking out|spiraling/i, 'anxiety'],
+    [/sad|lonely|alone|grief|miss |crying|tears|empty|hollow|lost someone|heartbr|reject|broke.*heart|depress|hopeless|despair|miserable/i, 'sadness'],
     [/angry|furious|frustrat|irritat|mad|rage|pissed|annoyed|hate|resentment|bitter/i, 'anger'],
     [/scar|afraid|fear|terrif|anxious about future|dread|insecure|vulnerable|unsafe|worried about/i, 'fear'],
+    [/unmotivat|stuck|lazy|procrastinat|no energy|tired|exhausted|can.t start|don.t feel like|lost direction|purposeless|demotivat|low energy|drained|burnt out|burnout/i, 'unmotivated'],
+    [/low|down|unsuccessful|failure|failed|worthless|useless|not good enough|inadequate|defeated|lost hope|giving up|no purpose|no point|weak|pathetic|loser|behind in life|wasting|nothing going/i, 'unmotivated'],
+    [/happy|excited|great|amazing|wonderful|grateful|thankful|blessed|joy|fantastic|good mood|feeling good|positive|cheerful|elated|thrilled|pumped|on top/i, 'happy'],
   ]
   for (const [re, mood] of map) { if (re.test(t)) return mood }
-  // Default: if generally negative lean anxiety, if positive lean happy
-  if (/not |can.t|don.t|no |bad|rough|hard|difficult|struggle/i.test(t)) return 'anxiety'
-  if (/calm|peace|serene|quiet|still|focus|meditat|reflect/i.test(t)) return 'anxiety' // deep calm session
-  return 'happy'
+  // Fallback heuristics
+  if (/not |can.t|don.t|no |bad|rough|hard|difficult|struggle|tough|sucks|hate/i.test(t)) return 'sadness'
+  if (/calm|peace|serene|quiet|still|focus|meditat|reflect/i.test(t)) return 'anxiety'
+  // Default to sadness (safer than happy — a gentle session never hurts)
+  return 'sadness'
 }
 
 export default async function handler(req, res) {

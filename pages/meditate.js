@@ -99,20 +99,47 @@ function SessionPlayer({ session, onReset }) {
   const current = steps[stepIdx]
   const totalDuration = current.durationSec
 
-  // Voice narration — slow, monk-like pace
+  const ttsAudioRef = useRef(null)
+
+  // Voice narration — try OpenAI TTS first, fallback to browser SpeechSynthesis
   useEffect(() => {
     if (!playing) return
+    let cancelled = false
+
+    // Stop any previous narration
+    if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
     window.speechSynthesis?.cancel()
-    const u = new SpeechSynthesisUtterance(current.text)
-    u.rate = 0.6    // slow, deliberate monk pace
-    u.pitch = 0.85  // deeper, calmer tone
-    u.volume = 0.9
-    // Prefer a calm English voice if available
-    const voices = window.speechSynthesis?.getVoices() || []
-    const calm = voices.find(v => /samantha|karen|daniel|google uk/i.test(v.name)) || voices.find(v => v.lang.startsWith('en'))
-    if (calm) u.voice = calm
-    window.speechSynthesis?.speak(u)
-    return () => window.speechSynthesis?.cancel()
+
+    // Try server TTS
+    fetch('/api/tts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: current.text })
+    }).then(r => {
+      if (!r.ok || cancelled) throw new Error('no tts')
+      return r.blob()
+    }).then(blob => {
+      if (cancelled) return
+      const audio = new Audio(URL.createObjectURL(blob))
+      audio.volume = 0.95
+      audio.play()
+      ttsAudioRef.current = audio
+    }).catch(() => {
+      // Fallback: browser SpeechSynthesis
+      if (cancelled) return
+      const u = new SpeechSynthesisUtterance(current.text)
+      u.rate = 0.65; u.pitch = 0.8; u.volume = 0.9
+      const voices = window.speechSynthesis?.getVoices() || []
+      const calm = voices.find(v => /samantha|karen|daniel|google uk|english.*female/i.test(v.name))
+        || voices.find(v => v.lang.startsWith('en'))
+      if (calm) u.voice = calm
+      window.speechSynthesis?.speak(u)
+    })
+
+    return () => {
+      cancelled = true
+      if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
+      window.speechSynthesis?.cancel()
+    }
   }, [playing, stepIdx, current.text])
 
   // Timer
@@ -213,6 +240,7 @@ function SessionPlayer({ session, onReset }) {
     }
     try { audioCtxRef.current?.close() } catch {}
     audioOscRef.current = null; audioCtxRef.current = null
+    if (ttsAudioRef.current) { ttsAudioRef.current.pause(); ttsAudioRef.current = null }
     window.speechSynthesis?.cancel()
   }
   function toggle() {
