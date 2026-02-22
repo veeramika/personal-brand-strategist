@@ -134,7 +134,22 @@ function SessionPlayer({ session, onReset }) {
     }, 2000)
   }
 
-  // Voice narration — speech-driven (no fixed timer)
+  const audioCache = useRef({}) // stepIdx → blob URL
+
+  // Pre-fetch all step audio on first play
+  useEffect(() => {
+    if (!playing || Object.keys(audioCache.current).length > 0) return
+    allSteps.forEach((step, i) => {
+      fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: step.text })
+      }).then(r => r.ok ? r.blob() : null)
+        .then(blob => { if (blob) audioCache.current[i] = URL.createObjectURL(blob) })
+        .catch(() => {})
+    })
+  }, [playing])
+
+  // Play current step audio
   useEffect(() => {
     if (!playing) return
     clearTimeout(timerRef.current)
@@ -143,21 +158,20 @@ function SessionPlayer({ session, onReset }) {
     window.speechSynthesis?.cancel()
     setSpeaking(true)
 
-    // Try OpenAI TTS
-    fetch('/api/tts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: current.text })
-    }).then(r => {
-      if (!r.ok || cancelled) throw new Error('no tts')
-      return r.blob()
-    }).then(blob => {
-      if (cancelled) return
-      const audio = new Audio(URL.createObjectURL(blob))
-      audio.volume = 0.95
-      audio.onended = () => { if (!cancelled) onSpeechEnd() }
-      audio.play()
-      ttsAudioRef.current = audio
-    }).catch(() => {
+    function playFromCache() {
+      const cached = audioCache.current[stepIdx]
+      if (cached && !cancelled) {
+        const audio = new Audio(cached)
+        audio.volume = 0.95
+        audio.onended = () => { if (!cancelled) onSpeechEnd() }
+        audio.play()
+        ttsAudioRef.current = audio
+        return true
+      }
+      return false
+    }
+
+    function fallbackBrowserSpeech() {
       if (cancelled) return
       const u = new SpeechSynthesisUtterance(current.text)
       u.rate = 0.55; u.pitch = 0.9; u.volume = 0.85
@@ -166,7 +180,28 @@ function SessionPlayer({ session, onReset }) {
       if (calm) u.voice = calm
       u.onend = () => { if (!cancelled) onSpeechEnd() }
       window.speechSynthesis?.speak(u)
-    })
+    }
+
+    // Try cached first, then fetch, then browser fallback
+    if (playFromCache()) { /* playing from cache */ }
+    else {
+      fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: current.text })
+      }).then(r => {
+        if (!r.ok || cancelled) throw new Error('no tts')
+        return r.blob()
+      }).then(blob => {
+        if (cancelled) return
+        const url = URL.createObjectURL(blob)
+        audioCache.current[stepIdx] = url
+        const audio = new Audio(url)
+        audio.volume = 0.95
+        audio.onended = () => { if (!cancelled) onSpeechEnd() }
+        audio.play()
+        ttsAudioRef.current = audio
+      }).catch(() => fallbackBrowserSpeech())
+    }
 
     return () => {
       cancelled = true; clearTimeout(timerRef.current)
