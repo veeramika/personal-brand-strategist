@@ -11,7 +11,6 @@ function useBinauralBeat() {
   const [status, setStatus] = useState('idle') // idle | playing | error
 
   const start = useCallback((freq) => {
-    // Clean up any previous session
     try { nodesRef.current?.forEach(n => n.stop()) } catch {}
     try { ctxRef.current?.close() } catch {}
 
@@ -21,32 +20,28 @@ function useBinauralBeat() {
 
       const ctx = new AC()
       ctx.resume().then(() => {
-        const baseFreq = 150
-        const merger = ctx.createChannelMerger(2)
+        // Simple approach: both oscillators → gain → destination
+        // The slight frequency difference creates the binaural beat
         const gain = ctx.createGain()
-        gain.gain.value = 0.7
+        gain.gain.value = 0.5
         gain.connect(ctx.destination)
-        merger.connect(gain)
 
-        // Left ear: base frequency
         const oscL = ctx.createOscillator()
+        oscL.frequency.value = 150
         oscL.type = 'sine'
-        oscL.frequency.value = baseFreq
-        oscL.connect(merger, 0, 0) // connect to left channel
-
-        // Right ear: base + binaural diff
-        const oscR = ctx.createOscillator()
-        oscR.type = 'sine'
-        oscR.frequency.value = baseFreq + freq
-        oscR.connect(merger, 0, 1) // connect to right channel
-
+        oscL.connect(gain)
         oscL.start()
+
+        const oscR = ctx.createOscillator()
+        oscR.frequency.value = 150 + freq
+        oscR.type = 'sine'
+        oscR.connect(gain)
         oscR.start()
 
         ctxRef.current = ctx
         nodesRef.current = [oscL, oscR]
         setStatus('playing')
-      })
+      }).catch(e => { console.error('Resume failed:', e); setStatus('error') })
     } catch (e) {
       console.error('Audio error:', e)
       setStatus('error')
@@ -197,6 +192,23 @@ function SessionPlayer({ session, onReset }) {
             {playing ? '⏸' : '▶'}
           </button>
           <button className="m-ctrl-btn" onClick={() => goStep(Math.min(steps.length - 1, stepIdx + 1))}>⏭</button>
+        </div>
+
+        {/* Debug: test raw audio */}
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <button style={{ fontSize: 12, padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#a78bfa', cursor: 'pointer', fontFamily: 'inherit' }}
+            onClick={() => {
+              const ac = new (window.AudioContext || window.webkitAudioContext)()
+              ac.resume().then(() => {
+                const o = ac.createOscillator()
+                o.frequency.value = 440
+                o.connect(ac.destination)
+                o.start()
+                setTimeout(() => { o.stop(); ac.close() }, 1000)
+              })
+            }}>
+            🔈 Test Audio (1s beep)
+          </button>
         </div>
 
         {binaural.status === 'playing' && (
